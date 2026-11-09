@@ -1,0 +1,9 @@
+{
+  "name": "mediroster",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2025-11-01",
+  "workers_dev": true,
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  "d1_databases": [{ "binding": "DB" }],
+  "triggers": { "crons": ["*/5 * * * *"] }
+}
