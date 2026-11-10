@@ -37,8 +37,8 @@ async function go(n){ws=addDays(ws,n);await refresh()}
 async function goToday(){ws=monday(new Date(today()+'T00:00'));await refresh()}
 async function setDept(v){rdept=v;await refresh()}
 function initView(){rdept=user.role==='worker'?user.dept:(db.staff.length>60&&db.depts[0]?db.depts[0]:'');ws=monday(new Date(db.today+'T00:00'));sq='';spage=0;stat={};attRows=null;attDate=''}
-async function enter(){tab=tabsFor(user.role)[0][0];initView();if(iso(ws)!==db.week||rdept!==db.dept)await refresh();else render();startPolling();tick();chatPing()}
-function dropSession(){clearInterval(poll);clearInterval(tk);clearInterval(pingIv);stopChatPoll();chatReset();token=null;user=null;db=null;note=null;bell=false;try{localStorage.removeItem(TK)}catch(e){}document.getElementById('banner').classList.add('hidden');screen='login';loginView()}
+async function enter(){tab=tabsFor(user.role)[0][0];initView();if(iso(ws)!==db.week||rdept!==db.dept)await refresh();else render();startPolling();tick();chatPing();pushInit()}
+function dropSession(){pushOn=false;pushAsk=false;clearInterval(poll);clearInterval(tk);clearInterval(pingIv);stopChatPoll();chatReset();token=null;user=null;db=null;note=null;bell=false;try{localStorage.removeItem(TK)}catch(e){}document.getElementById('banner').classList.add('hidden');screen='login';loginView()}
 const today=()=>(db&&db.today)||iso(new Date());
 const tplOf=id=>db.tpl.find(t=>t.id===id);
 const isMgr=()=>user&&(user.role==='master'||user.role==='admin');
@@ -68,7 +68,7 @@ async function doLogin(e){e.preventDefault();
   if(j.needsSetup){setupUser={id:j.id,name:j.name,temp:$v('lpw')};screen='setup';return loginView()}
   token=j.token;try{localStorage.setItem(TK,token)}catch(x){}startSession()}catch(x){lerr(x.message)}return false}
 async function startSession(){screen='login';loc={mode:'gps',status:'idle'};await enter()}
-async function signOut(){try{await api('logout',{},1)}catch(e){}dropSession()}
+async function signOut(){try{if(pushOK()){const s=await (await readyReg()).pushManager.getSubscription();if(s)await api('pushUnsubscribe',{endpoint:s.endpoint},1)}}catch(e){}try{await api('logout',{},1)}catch(e){}dropSession()}
 function setupView(){const s=setupUser;authShell(`<div><h2 class="text-2xl font-bold">Account Initialization Setup</h2><p class="text-slate-500 text-sm">Welcome, ${esc(s.name)} (${s.id}). Create your permanent passcode to continue. Your temporary passcode will stop working.</p></div>
  <form onsubmit="return doSetup(event)" class="space-y-4">
   <div><label class="text-sm font-semibold">New passcode</label><input id="np1" type="password" maxlength="40" class="inp mt-1 font-mono" autocomplete="new-password"></div>
@@ -101,10 +101,10 @@ function render(){
    <button onclick="toggleBell()" class="relative btn2 !bg-slate-800 !border-slate-600 !text-white" aria-label="Notifications">🔔<span id="bb">${badgeHTML()}</span></button>
    <div class="text-right leading-tight hidden sm:block"><div class="text-sm font-semibold">${esc(user.name)}${bdg(user,1)}</div><div class="text-xs text-slate-400">${rl} · ${user.id}</div></div>
    <button onclick="signOut()" class="btn2 !bg-white !text-slate-900">Sign Out</button>
-   ${bell?`<div class="absolute right-0 top-12 w-96 max-w-[90vw] max-h-[75vh] overflow-y-auto bg-white text-slate-900 rounded-xl shadow-2xl border border-slate-200 p-3 space-y-2"><div class="flex justify-between items-center"><div class="font-bold text-sm">Notification Center</div><div class="flex gap-3"><button class="text-xs text-blue-700 font-semibold" onclick="enableAlerts()">Enable device alerts</button></div></div>${my.length?my.slice(0,15).map(n=>`<div class="text-sm rounded-lg p-2 border ${n.read?'bg-slate-50 border-slate-200':'bg-blue-50 border-blue-200'}">${esc(n.msg)}<div class="text-xs text-slate-500 mt-1">${n.t}</div></div>`).join(''):'<div class="text-sm text-slate-500">No alerts yet. An alert appears here when one of your shifts starts.</div>'}</div>`:''}
+   ${bell?`<div class="absolute right-0 top-12 w-96 max-w-[90vw] max-h-[75vh] overflow-y-auto bg-white text-slate-900 rounded-xl shadow-2xl border border-slate-200 p-3 space-y-2"><div class="flex justify-between items-center"><div class="font-bold text-sm">Notification Center</div><div class="flex gap-3"><button class="text-xs text-blue-700 font-semibold" onclick="${pushOn?'testPush()':'enablePush()'}">${pushOn?'Send test notification':'Turn on phone notifications'}</button>${pushOn?'<button class="text-xs text-slate-600 font-semibold" onclick="disablePush()">Turn off</button>':''}</div></div>${my.length?my.slice(0,15).map(n=>`<div class="text-sm rounded-lg p-2 border ${n.read?'bg-slate-50 border-slate-200':'bg-blue-50 border-blue-200'}">${esc(n.msg)}<div class="text-xs text-slate-500 mt-1">${n.t}</div></div>`).join(''):'<div class="text-sm text-slate-500">No alerts yet. An alert appears here when one of your shifts starts.</div>'}</div>`:''}
   </div></div>
   <nav class="flex gap-1 px-3 overflow-x-auto">${tabs.map(t=>`<button onclick="tab='${t[0]}';render()" class="px-4 py-2.5 text-sm whitespace-nowrap font-semibold border-b-2 ${tab===t[0]?'border-blue-500 text-white':'border-transparent text-slate-400 hover:text-white'}">${t[1]}${t[0]==='chat'?'<span id="chatdot"></span>':''}</button>`).join('')}</nav></header>
-  <main class="p-4 lg:p-6 max-w-7xl mx-auto space-y-4">${user.role==='master'?statusHTML():''}${isMgr()?pendingHTML()+noteHTML()+(db.leavePending&&tab!=='leave'?`<div class="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 flex flex-wrap items-center justify-between gap-2"><div class="font-semibold text-amber-900">${db.leavePending} leave request${db.leavePending===1?'':'s'} waiting for a decision</div><button class="btn" onclick="tab='leave';render()">Review</button></div>`:''):''}${view()}</main>`;
+  <main class="p-4 lg:p-6 max-w-7xl mx-auto space-y-4">${pushAsk?pushBanner():''}${user.role==='master'?statusHTML():''}${isMgr()?pendingHTML()+noteHTML()+(db.leavePending&&tab!=='leave'?`<div class="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 flex flex-wrap items-center justify-between gap-2"><div class="font-semibold text-amber-900">${db.leavePending} leave request${db.leavePending===1?'':'s'} waiting for a decision</div><button class="btn" onclick="tab='leave';render()">Review</button></div>`:''):''}${view()}</main>`;
  if(tab==='attend'&&user.role==='worker'&&loc.status==='idle')checkLoc();
  if(tab==='staff'&&user.role==='master')loadStatus();
  if(tab!=='leave')leaveData=null;else if(leaveData===null)loadLeave();
@@ -227,6 +227,30 @@ function attendAdmin(){const z=db.zone,m=user.role==='master';
  <button class="btn" onclick="saveZone()">Save zone</button><button class="btn2" onclick="useHere()">Use my current location</button></div>`:'')+attPicker()+histTable(attRows||db.att,'Clock-ins on '+(attDate||today()))}
 async function saveZone(){try{await api('saveZone',{name:$v('zn'),lat:$v('zla'),lng:$v('zlo'),radius:$v('zr')});toast('Zone saved.');render()}catch(e){}}
 function useHere(){if(!navigator.geolocation)return toast('Geolocation unavailable here.');navigator.geolocation.getCurrentPosition(p=>{document.getElementById('zla').value=p.coords.latitude.toFixed(6);document.getElementById('zlo').value=p.coords.longitude.toFixed(6);toast('Coordinates filled. Press Save zone.')},e=>toast('GPS blocked: '+e.message+'. Type coordinates manually.'),{timeout:8000})}
+
+/* ---------- PHONE NOTIFICATIONS (push) ---------- */
+const isIOS=()=>/iPhone|iPad|iPod/i.test(navigator.userAgent||'');
+const pushOK=()=>!!(navigator.serviceWorker&&window.PushManager&&window.Notification);
+const readyReg=()=>Promise.race([navigator.serviceWorker.ready,new Promise((_,rej)=>setTimeout(()=>rej(new Error('The app is still starting. Try again in a moment.')),4000))]);
+let pushOn=false,pushAsk=false;
+function u8key(b){b=b.replace(/-/g,'+').replace(/_/g,'/');while(b.length%4)b+='=';return Uint8Array.from(atob(b),c=>c.charCodeAt(0))}
+async function pushInit(){pushAsk=false;if(!user)return;
+ if(pushOK()){try{const sub=await (await readyReg()).pushManager.getSubscription();pushOn=!!sub&&Notification.permission==='granted';if(pushOn)await api('pushSubscribe',{sub:sub.toJSON()},1)}catch(e){}
+  let d=false;try{d=!!localStorage.getItem('mr_push_dismiss')}catch(e){}pushAsk=!pushOn&&Notification.permission==='default'&&!d}
+ else if(isIOS()&&!isStandalone()){let d=false;try{d=!!localStorage.getItem('mr_push_dismiss_ios')}catch(e){}pushAsk=d?false:'ios'}
+ render()}
+function pushBanner(){return pushAsk==='ios'?`<div class="rounded-xl border-2 border-blue-300 bg-blue-50 p-3 flex flex-wrap items-center justify-between gap-2"><div class="text-sm text-blue-900"><b>Want notifications on your iPhone?</b> First add MediRoster to your Home Screen (Share, then Add to Home Screen), then open it from there.</div><button class="btn2" onclick="pushDismiss('ios')">OK</button></div>`
+ :`<div class="rounded-xl border-2 border-blue-300 bg-blue-50 p-3 flex flex-wrap items-center justify-between gap-2"><div class="text-sm text-blue-900"><b>Turn on notifications</b> to get shift reminders and message alerts on this device.</div><div class="flex gap-2"><button class="btn" onclick="enablePush()">Turn on</button><button class="btn2" onclick="pushDismiss()">Not now</button></div></div>`}
+function pushDismiss(k){try{localStorage.setItem(k==='ios'?'mr_push_dismiss_ios':'mr_push_dismiss','1')}catch(e){}pushAsk=false;render()}
+async function enablePush(){try{
+ if(!pushOK()){toast(isIOS()?'On iPhone, add MediRoster to the Home Screen first, then open it from there.':'This browser cannot show app notifications.');return}
+ const perm=await Notification.requestPermission();if(perm!=='granted'){toast('Notifications were not allowed. You can allow them in your phone settings for MediRoster.');pushAsk=false;render();return}
+ const reg=await readyReg(),{key}=await api('pushKey',{},1);let sub=await reg.pushManager.getSubscription();
+ if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8key(key)});
+ await api('pushSubscribe',{sub:sub.toJSON()},1);pushOn=true;pushAsk=false;toast('Notifications are on for this device.');render()}
+ catch(e){toast('Could not turn on notifications: '+((e&&e.message)||e))}}
+async function disablePush(){try{const sub=await (await readyReg()).pushManager.getSubscription();if(sub){await api('pushUnsubscribe',{endpoint:sub.endpoint},1);await sub.unsubscribe()}pushOn=false;toast('Notifications are off for this device.');render()}catch(e){toast(e.message)}}
+async function testPush(){try{await api('pushTest',{},1);toast('Test notification sent.')}catch(e){toast(e.message)}}
 
 /* ---------- CHAT (everyone + private messages) ---------- */
 let cs={room:'all',peer:null,msgs:[],since:0,peers:[],dms:[],unread:[],allLatest:0,poll:null,loaded:false};

@@ -11,6 +11,7 @@
 //   sent/<date>              which reminder emails were already sent
 //   logs, maillog            activity logs (newest first, capped)
 import { smtpSend } from './smtp.mjs';
+import { pushUsers, vapidKeys } from './push.mjs';
 
 export const MASTER_ID = 'EMP-2026-M01';
 class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
@@ -258,7 +259,7 @@ function expandOps(ops, cfg, staff) {
 }
 
 /* ---------- the server entry point used by the app ---------- */
-export async function handle({ kv, env, origin, send = sendMail }, body) {
+export async function handle({ kv, env, origin, send = sendMail, defer }, body) {
   const tz = zoneOf(env);
   try {
     const { action, payload: p = {}, token } = body || {};
@@ -376,6 +377,7 @@ export async function handle({ kv, env, origin, send = sendMail }, body) {
     };
     const saveStaff = () => kv.set('staff', staff);
     const saveCfg = () => kv.set('cfg', cfg);
+    const notify = (uids, obj, opts) => { const job = pushUsers(kv, env, uids, obj, { site: site(), ...opts }).catch(() => {}); return defer ? defer(job) : job; };
     const putMsg = async (room, from, text) => { const ts = Date.now(); await kv.set(`chat/${room}/${ymd(ts)}/${String(ts).padStart(13, '0')}-${rhex(3)}`, { ts, from: from.id, name: from.name, role: from.role, text }); return ts; };
     const dmMark = (from, to, ts) => Promise.all([kv.set('dmidx/' + from.id + '/' + to.id, { ts }), kv.set('dmidx/' + to.id + '/' + from.id, { ts }), kv.set('dmnew/' + to.id + '/' + from.id, { ts })]);
     const chatRoom = () => {
@@ -412,7 +414,9 @@ export async function handle({ kv, env, origin, send = sendMail }, body) {
         const rid = 'r' + Date.now() + rint(100, 999), days = [...Array(span)].map((_, i) => ymd(Date.parse(from) + i * 864e5));
         await kv.set('lvreq/' + me.id + '/' + rid, { rid, sid: me.id, from, to, days, reason: clean(p.reason, 200), status: 'pending', createdAt: Date.now() });
         await kv.set('lvpend/' + me.id + '/' + rid, 1);
-        await log(me.name, `Applied for leave ${from} to ${to}`); return ok({ ok: true });
+        await log(me.name, `Applied for leave ${from} to ${to}`);
+        await notify(staff.filter((x) => x.id !== me.id && (x.role === 'master' || (x.role === 'admin' && me.role === 'worker'))).slice(0, 25).map((x) => x.id), { title: 'Leave request', body: me.name + ' applied for leave', url: '/', tag: 'leave-new' }, { ttl: 86400 });
+        return ok({ ok: true });
       }
       case 'leaveList': {
         const mine = await Promise.all((await kv.list('lvreq/' + me.id + '/')).sort().reverse().slice(0, 20).map((k) => kv.get(k)));
@@ -441,6 +445,7 @@ export async function handle({ kv, env, origin, send = sendMail }, body) {
         await log(me.name, `Leave for ${t.name} (${r.from} to ${r.to}): ${r.status}, ${days.length} of ${r.days.length} days approved`);
         const said = r.status === 'approved' ? `approved for all ${days.length} days` : r.status === 'partial' ? `partly approved (${days.length} of ${r.days.length} days: ${days.slice(0, 8).join(', ')}${days.length > 8 ? ' ...' : ''})` : 'not approved';
         const ts = await putMsg(dmRoom(me.id, t.id), me, clean(`Your leave request (${r.from} to ${r.to}) was ${said}.${r.note ? ' Message: ' + r.note : ''}`, 500)); await dmMark(me, t, ts);
+        await notify([t.id], { title: 'Leave request ' + (r.status === 'approved' ? 'approved' : r.status === 'partial' ? 'partly approved' : 'not approved'), body: 'Open MediRoster for details', url: '/', tag: 'leave-' + r.rid }, { ttl: 86400 });
         return reply();
       }
       case 'markLeave': {
@@ -480,12 +485,32 @@ export async function handle({ kv, env, origin, send = sendMail }, body) {
         if (Date.now() - last < 700) fail(429, 'Slow down a little.');
         await kv.set(lastK, Date.now());
         const ts = await putMsg(room, me, text);
-        if (other) await dmMark(me, other, ts);
+        if (other) { await dmMark(me, other, ts); await notify([other.id], { title: 'New private message', body: 'From ' + me.name, url: '/', tag: 'dm-' + me.id }, { ttl: 86400 }); }
         return ok({ ok: true, ts });
       }
       case 'chatDelete': {
         needMaster(); const k = String(p.k || ''); if (!k.startsWith('chat/all/')) fail(400, 'Only group messages can be deleted.');
         await kv.del(k); await log(me.name, 'Deleted a message from the everyone chat'); return ok({ ok: true });
+      }
+      case 'pushKey': return ok({ key: (await vapidKeys(kv)).pub });
+      case 'pushSubscribe': {
+        const sub = p.sub || {}, ep = String(sub.endpoint || ''), k = sub.keys || {};
+        if (!/^https:\/\/[^\s]{10,500}$/.test(ep) || !/^[A-Za-z0-9_-]{80,100}$/.test(String(k.p256dh || '')) || !/^[A-Za-z0-9_-]{16,30}$/.test(String(k.auth || ''))) fail(400, 'That device could not be registered for notifications.');
+        const h = (await sha(ep)).slice(0, 24), owner = await kv.get('pushep/' + h);
+        if (owner && owner !== me.id) await kv.del('push/' + owner + '/' + h);
+        await kv.set('push/' + me.id + '/' + h, { endpoint: ep, p256dh: k.p256dh, auth: k.auth, ts: Date.now() }); await kv.set('pushep/' + h, me.id);
+        const mine = await kv.list('push/' + me.id + '/');
+        if (mine.length > 5) { const subs = await Promise.all(mine.map(async (x) => ({ x, ts: ((await kv.get(x)) || {}).ts || 0 }))); subs.sort((a, b) => a.ts - b.ts); for (const o of subs.slice(0, mine.length - 5)) await kv.del(o.x); }
+        return ok({ ok: true });
+      }
+      case 'pushUnsubscribe': {
+        const ep = String(p.endpoint || ''), h = (await sha(ep)).slice(0, 24), owner = await kv.get('pushep/' + h);
+        if (owner === me.id) { await kv.del('push/' + me.id + '/' + h); await kv.del('pushep/' + h); }
+        return ok({ ok: true });
+      }
+      case 'pushTest': {
+        if (!(await kv.list('push/' + me.id + '/')).length) fail(400, 'Notifications are not turned on for this device yet.');
+        await pushUsers(kv, env, [me.id], { title: 'MediRoster notifications are on', body: 'You will get shift reminders and message alerts here.', url: '/', tag: 'test' }, { ttl: 300, site: site() }); return ok({ ok: true });
       }
       case 'setStaffDept': {
         needMaster(); const s = find(p.id), d = clean(p.dept, 60);
@@ -634,6 +659,7 @@ export async function runReminders({ kv, env, send = sendMail, at = new Date(), 
     await Promise.all(due.slice(i, i + 8).map(async ({ s, date, stage, k }) => {
       sentMap[date][k] = Date.now();
       const what = stage === 'soon' ? '30-Minute Shift Reminder' : 'Shift Start';
+      await pushUsers(kv, env, [s.id], stage === 'soon' ? { title: 'Shift starts in about 30 minutes', body: 'Get ready and clock in at the hospital.', url: '/', tag: 'shift-' + date + '-' + k.split('|')[2] } : { title: 'Your shift has started', body: 'Please clock in at the hospital.', url: '/', tag: 'shift-' + date + '-' + k.split('|')[2] }, { ttl: 1800, urgency: 'high', site: (env.SITE_URL || cfg.site || '') });
       if (!s.email) return entry(`⚠ ${what} email skipped for ${s.name} (no email on file).`);
       const r = await send(env, s.email, stage === 'soon' ? 'Your shift starts in about 30 minutes' : 'Your shift has started', stage === 'soon' ? SOON_TEXT : START_TEXT);
       if (r.ok) sent++;
