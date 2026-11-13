@@ -45,16 +45,16 @@ function tempPass() {
   for (let i = 7; i > 0; i--) { const j = rint(0, i + 1); [c[i], c[j]] = [c[j], c[i]]; }
   return c.join('');
 }
-const SESSION_HOURS = 12;
+const SESSION_DAYS = 30; // stay signed in for 30 days; the session is renewed automatically while the app is used
 const goodUrl = (u) => { const t = String(u || '').trim().replace(/\/+$/, ''); return /^https?:\/\/[^\s]+$/.test(t) ? t : ''; };
 const zoneOf = (env) => { const z = String(env.TIMEZONE || '').trim(); try { new Intl.DateTimeFormat('en-GB', { timeZone: z }); return z; } catch (e) { return 'Asia/Kolkata'; } };
 const sessKey = (env) => 'mediroster|' + (env.SESSION_SECRET || '') + '|' + (env.MASTER_PASSCODE || '');
-const sign = async (env, uid) => { const p = uid + '|' + (Date.now() + SESSION_HOURS * 3600e3); return b64u(p) + '.' + (await hmacHex(sessKey(env), p)); };
+const sign = async (env, uid) => { const p = uid + '|' + (Date.now() + SESSION_DAYS * 864e5); return b64u(p) + '.' + (await hmacHex(sessKey(env), p)); };
 async function unsign(env, tk) {
   try {
     const [b, mac] = String(tk).split('.'), p = unb64u(b);
     if (!ctEq(mac, await hmacHex(sessKey(env), p))) return null;
-    const [uid, exp] = p.split('|'); return Number(exp) > Date.now() ? uid : null;
+    const [uid, exp] = p.split('|'); return Number(exp) > Date.now() ? { uid, exp: Number(exp) } : null;
   } catch (e) { return null; }
 }
 
@@ -102,13 +102,57 @@ function dist(a, b, c, d) {
 }
 const tsOfKey = (k) => Number(String(k).split('/').pop().split('-')[0]);
 const dmRoom = (a, b) => 'dm_' + [a, b].sort().join('_');
-async function chatKeys(kv, room, since, limit) {
+const chatKey = (room, ts) => `chat/${room}/${ymd(ts)}/${String(ts).padStart(13, '0')}`;
+// Messages of one room in ONE database query. since=0 gives the newest `limit`; otherwise everything from `since` on.
+async function chatMsgs(kv, room, since, limit) {
+  const base = `chat/${room}/`, end = base + '\uffff';
+  if (kv.range) {
+    const rows = since ? await kv.range(chatKey(room, since), end, limit, false) : (await kv.range(base, end, limit, true)).reverse();
+    return rows.map((r) => ({ ...r.value, k: r.key }));
+  }
   let out = []; const now = Date.now();
   for (let d = 0; d < (since ? 2 : 14) && (since || out.length < limit); d++) {
     const ks = (await kv.list(`chat/${room}/${ymd(now - d * 864e5)}/`)).sort();
     out = [...(since ? ks.filter((k) => tsOfKey(k) >= since) : ks), ...out];
   }
-  return out.slice(-limit);
+  return (await Promise.all(out.slice(-limit).map(async (k) => { const m = await kv.get(k); return m && { ...m, k }; }))).filter(Boolean);
+}
+async function latestAll(kv) {
+  if (kv.range) { const r = await kv.range('chat/all/', 'chat/all/\uffff', 1, true); return r.length ? tsOfKey(r[0].key) : 0; }
+  for (let d = 0; d < 2; d++) { const ks = (await kv.list(`chat/all/${ymd(Date.now() - d * 864e5)}/`)).sort(); if (ks.length) return tsOfKey(ks[ks.length - 1]); }
+  return 0;
+}
+const MEDIA_CHUNK = 460800, MEDIA_MAX_CHUNKS = 19, MEDIA_KEEP_DAYS = 30;
+const MEDIA_OK = { image: ['image/jpeg'], video: ['video/mp4', 'video/webm', 'video/quicktime'] };
+const b64ToBytes = (t) => { const bin = atob(t), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
+const roomAllows = (room, uid) => room === 'all' || (room.startsWith('dm_') && room.split('_').slice(1).includes(uid));
+/* Photos and videos in chat: stored in small pieces; served by the /m/<id> address with the person's session token. */
+export async function serveMedia({ kv, env }, id, token, rangeHeader) {
+  const deny = (st, msg) => new Response(msg, { status: st, headers: { 'Cache-Control': 'no-store' } });
+  if (!env.MASTER_PASSCODE) return deny(500, 'Server not set up');
+  const sess = token ? await unsign(env, token) : null; if (!sess) return deny(401, 'Please sign in again');
+  const [staff, meta] = await Promise.all([kv.get('staff'), kv.get('media/' + id + '/m')]);
+  const me = (staff || []).find((s) => s.id === sess.uid); if (!me) return deny(401, 'Please sign in again');
+  if (me.role !== 'master') { const a = await kv.get('acct/' + me.id); if (!a || a.reset || a.setup) return deny(401, 'Please sign in again'); }
+  if (!meta || !meta.done) return deny(404, 'This photo or video is no longer available');
+  if (!roomAllows(meta.room, me.id)) return deny(403, 'Not allowed');
+  const size = meta.size, ch = MEDIA_CHUNK; let start = 0, end = size - 1, partial = false;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(String(rangeHeader || '').trim());
+  if (m && (m[1] || m[2])) {
+    partial = true;
+    if (!m[1]) { start = Math.max(0, size - Number(m[2])); } else { start = Number(m[1]); if (m[2]) end = Math.min(end, Number(m[2])); }
+    end = Math.min(end, start + ch * 2 - 1, size - 1);
+    if (start >= size || start > end) return new Response('', { status: 416, headers: { 'Content-Range': 'bytes */' + size } });
+  } else if (meta.n > 3) { partial = true; end = Math.min(size - 1, ch * 2 - 1); } // big video asked without a range: send the first part
+  const first = Math.floor(start / ch), last = Math.floor(end / ch), parts = [];
+  for (let i = first; i <= last; i++) {
+    const c = await kv.get('media/' + id + '/c/' + String(i).padStart(2, '0')); if (typeof c !== 'string') return deny(404, 'This photo or video is no longer available');
+    const bytes = b64ToBytes(c), a = i === first ? start - i * ch : 0, b = i === last ? end - i * ch + 1 : bytes.length; parts.push(bytes.subarray(a, b));
+  }
+  const body = new Uint8Array(end - start + 1); let o = 0; for (const x of parts) { body.set(x, o); o += x.length; }
+  const h = { 'Content-Type': meta.mime, 'Content-Length': String(body.length), 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, max-age=604800', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" };
+  if (partial) { h['Content-Range'] = `bytes ${start}-${end}/${size}`; return new Response(body, { status: 206, headers: h }); }
+  return new Response(body, { status: 200, headers: h });
 }
 const readWeek = async (kv, mon) => Object.assign({}, ...(await Promise.all(SHARDS.map((h) => kv.get('roster/' + mon + '/' + h)))).filter(Boolean));
 const defaultCfg = () => ({
@@ -265,7 +309,7 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
     const { action, payload: p = {}, token } = body || {};
     if (!env.MASTER_PASSCODE) fail(500, 'The server is missing the MASTER_PASSCODE setting.');
     PEPPER = (env.SESSION_SECRET || '') + '|' + env.MASTER_PASSCODE;
-    let staff = await kv.get('staff'), cfg = await kv.get('cfg');
+    let [staff, cfg] = await Promise.all([kv.get('staff'), kv.get('cfg')]);
     if (!cfg) { cfg = defaultCfg(); await kv.set('cfg', cfg); }
     if (origin && !goodUrl(env.SITE_URL) && cfg.site !== origin) { cfg.site = origin; await kv.set('cfg', cfg); }
     if (!staff) { staff = [masterRec()]; await kv.set('staff', staff); }
@@ -275,7 +319,7 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
     staff.forEach((s) => { if (s.id !== MASTER_ID && s.role === 'master') s.role = 'admin'; });
     const byId = new Map(staff.map((s) => [s.id, s]));
     const log = (who, msg) => addLog(kv, 'logs', who, msg, tz);
-    const ok = (b) => ({ status: 200, body: b });
+    const renew = {}; const ok = (b) => ({ status: 200, body: renew.tok ? { ...b, renew: renew.tok } : b });
     const site = () => goodUrl(env.SITE_URL) || goodUrl(origin);
 
     /* ---- what each person is allowed to see ---- */
@@ -362,9 +406,10 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
     }
 
     /* ---- everything below needs a valid session ---- */
-    const uid = token ? await unsign(env, token) : null, me = uid && byId.get(uid);
+    const sess = token ? await unsign(env, token) : null, me = sess && byId.get(sess.uid);
     if (!me) fail(401, 'Your session expired. Please sign in again.');
     if (me.role !== 'master') { const a = await kv.get('acct/' + me.id); if (!a || a.reset || a.setup) fail(401, 'Your session expired. Please sign in again.'); }
+    if (sess.exp - Date.now() < 15 * 864e5) renew.tok = await sign(env, me.id); // keeps people signed in while they use the app
     const isMaster = me.role === 'master', isMgr = me.role !== 'worker';
     const needMaster = () => { if (!isMaster) fail(403, 'Only the Master Admin can do that.'); };
     const needMgr = () => { if (!isMgr) fail(403, 'You do not have permission to do that.'); };
@@ -378,7 +423,7 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
     const saveStaff = () => kv.set('staff', staff);
     const saveCfg = () => kv.set('cfg', cfg);
     const notify = (uids, obj, opts) => { const job = pushUsers(kv, env, uids, obj, { site: site(), ...opts }).catch(() => {}); return defer ? defer(job) : job; };
-    const putMsg = async (room, from, text) => { const ts = Date.now(); await kv.set(`chat/${room}/${ymd(ts)}/${String(ts).padStart(13, '0')}-${rhex(3)}`, { ts, from: from.id, name: from.name, role: from.role, text }); return ts; };
+    const putMsg = async (room, from, text, media) => { const ts = Date.now(); await kv.set(`${chatKey(room, ts)}-${rhex(3)}`, { ts, from: from.id, name: from.name, role: from.role, text, ...(media ? { media } : {}) }); return ts; };
     const dmMark = (from, to, ts) => Promise.all([kv.set('dmidx/' + from.id + '/' + to.id, { ts }), kv.set('dmidx/' + to.id + '/' + from.id, { ts }), kv.set('dmnew/' + to.id + '/' + from.id, { ts })]);
     const chatRoom = () => {
       if (p.room !== 'dm') return { room: 'all' };
@@ -445,7 +490,7 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
         await log(me.name, `Leave for ${t.name} (${r.from} to ${r.to}): ${r.status}, ${days.length} of ${r.days.length} days approved`);
         const said = r.status === 'approved' ? `approved for all ${days.length} days` : r.status === 'partial' ? `partly approved (${days.length} of ${r.days.length} days: ${days.slice(0, 8).join(', ')}${days.length > 8 ? ' ...' : ''})` : 'not approved';
         const ts = await putMsg(dmRoom(me.id, t.id), me, clean(`Your leave request (${r.from} to ${r.to}) was ${said}.${r.note ? ' Message: ' + r.note : ''}`, 500)); await dmMark(me, t, ts);
-        await notify([t.id], { title: 'Leave request ' + (r.status === 'approved' ? 'approved' : r.status === 'partial' ? 'partly approved' : 'not approved'), body: 'Open MediRoster for details', url: '/', tag: 'leave-' + r.rid }, { ttl: 86400 });
+        await notify([t.id], { title: 'Leave request ' + (r.status === 'approved' ? 'approved' : r.status === 'partial' ? 'partly approved' : 'not approved'), body: 'Open MediRoster for details', url: '/', tag: 'leave-' + r.rid }, { ttl: 86400, urgency: 'high' });
         return reply();
       }
       case 'markLeave': {
@@ -462,9 +507,8 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
       }
       case 'chatPing':
       case 'chatInit': {
-        let allLatest = 0;
-        for (let d = 0; d < 2 && !allLatest; d++) { const ks = (await kv.list(`chat/all/${ymd(Date.now() - d * 864e5)}/`)).sort(); if (ks.length) allLatest = tsOfKey(ks[ks.length - 1]); }
-        const unread = (await kv.list('dmnew/' + me.id + '/')).map((k) => k.split('/')[2]).filter((i) => byId.has(i)).map((i) => ({ id: i, name: byId.get(i).name }));
+        const [allLatest, nk] = await Promise.all([latestAll(kv), kv.list('dmnew/' + me.id + '/')]);
+        const unread = nk.map((k) => k.split('/')[2]).filter((i) => byId.has(i)).map((i) => ({ id: i, name: byId.get(i).name }));
         const out = { allLatest, unread };
         if (action === 'chatInit') {
           out.peers = me.role === 'worker' ? staff.filter((x) => x.role !== 'worker' && x.id !== me.id).slice(0, 200).map((x) => ({ id: x.id, name: x.name, role: x.role, designation: x.designation || '' })) : [];
@@ -474,23 +518,45 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
       }
       case 'chatFetch': {
         const { room, other } = chatRoom(), since = Math.max(0, Number(p.since) || 0);
-        const keys = await chatKeys(kv, room, since, since ? 100 : 50);
-        const msgs = (await Promise.all(keys.map(async (k) => { const m = await kv.get(k); return m && { ...m, k }; }))).filter(Boolean);
-        if (other) await kv.del('dmnew/' + me.id + '/' + other.id);
+        const [msgs] = await Promise.all([chatMsgs(kv, room, since, since ? 100 : 50), other ? kv.del('dmnew/' + me.id + '/' + other.id) : null]);
         return ok({ msgs });
       }
+      case 'mediaChunk': {
+        const { room } = chatRoom(), mid = String(p.mid || ''), i = Number(p.i), n = Number(p.n), data = p.data;
+        if (!/^[a-z0-9]{12,24}$/.test(mid) || !Number.isInteger(i) || !Number.isInteger(n) || n < 1 || n > MEDIA_MAX_CHUNKS || i < 0 || i >= n) fail(400, 'That file could not be sent.');
+        if (typeof data !== 'string' || !data.length || data.length > 640000) fail(400, 'That file could not be sent.');
+        const mk = 'media/' + mid + '/m', old = await kv.get(mk);
+        if (i === 0 && !old) {
+          const kind = p.kind === 'video' ? 'video' : 'image', mime = String(p.mime || ''), size = Number(p.size);
+          if (!MEDIA_OK[kind].includes(mime) || !(size > 0) || size > n * MEDIA_CHUNK || size <= (n - 1) * MEDIA_CHUNK) fail(400, 'That kind of file cannot be sent. Use a photo, or an MP4 / MOV video.');
+          await kv.set(mk, { owner: me.id, room, kind, mime, size, n, ts: Date.now(), done: false });
+        } else if (!old || old.owner !== me.id || old.room !== room || old.n !== n) fail(400, 'That file could not be sent.');
+        await kv.set('media/' + mid + '/c/' + String(i).padStart(2, '0'), data);
+        if (i === n - 1) { const m = old || (await kv.get(mk)); if (m) { m.done = true; await kv.set(mk, m); } }
+        return ok({ ok: true });
+      }
       case 'chatSend': {
-        const text = clean(p.text, 500); if (!text) fail(400, 'Type a message first.');
-        const { room, other } = chatRoom(), lastK = 'chatlast/' + me.id, last = (await kv.get(lastK)) || 0;
-        if (Date.now() - last < 700) fail(429, 'Slow down a little.');
+        const text = clean(p.text, 500), { room, other } = chatRoom(); let media = null;
+        if (p.media) {
+          const mid = String(p.media.mid || ''), m = /^[a-z0-9]{12,24}$/.test(mid) ? await kv.get('media/' + mid + '/m') : null;
+          if (!m || !m.done || m.owner !== me.id || m.room !== room) fail(400, 'That photo or video was not uploaded properly. Please try again.');
+          media = { mid, kind: m.kind, mime: m.mime, size: m.size };
+        }
+        if (!text && !media) fail(400, 'Type a message first.');
+        const lastK = 'chatlast/' + me.id, last = (await kv.get(lastK)) || 0;
+        if (Date.now() - last < 500) fail(429, 'Slow down a little.');
         await kv.set(lastK, Date.now());
-        const ts = await putMsg(room, me, text);
-        if (other) { await dmMark(me, other, ts); await notify([other.id], { title: 'New private message', body: 'From ' + me.name, url: '/', tag: 'dm-' + me.id }, { ttl: 86400 }); }
+        const ts = await putMsg(room, me, text, media);
+        if (other) {
+          await dmMark(me, other, ts);
+          const preview = text ? text.slice(0, 120) : media.kind === 'video' ? '🎥 Video' : '📷 Photo';
+          await notify([other.id], { title: me.name, body: text && media ? (media.kind === 'video' ? '🎥 ' : '📷 ') + preview : preview, url: '/#dm=' + me.id, tag: 'dm-' + me.id }, { ttl: 86400, urgency: 'high' });
+        }
         return ok({ ok: true, ts });
       }
       case 'chatDelete': {
         needMaster(); const k = String(p.k || ''); if (!k.startsWith('chat/all/')) fail(400, 'Only group messages can be deleted.');
-        await kv.del(k); await log(me.name, 'Deleted a message from the everyone chat'); return ok({ ok: true });
+        const old = await kv.get(k); if (old && old.media && old.media.mid && kv.delPrefix) await kv.delPrefix('media/' + old.media.mid + '/'); await kv.del(k); await log(me.name, 'Deleted a message from the everyone chat'); return ok({ ok: true });
       }
       case 'pushKey': return ok({ key: (await vapidKeys(kv)).pub });
       case 'pushSubscribe': {
@@ -679,6 +745,13 @@ export async function runReminders({ kv, env, send = sendMail, at = new Date(), 
       if (r.ok) onboard++;
       entry(r.ok ? `📧 Automated email dispatched to: ${s.email} for Account Onboarding.` : `⚠ Onboarding email to ${s.email} failed (${r.status}). Share the temporary passcode manually (see Staff tab).`);
     }));
+  }
+  /* once a day (around 03:00 India time): remove photos and videos older than 30 days to keep the database small */
+  if (kv.delPrefix && at.getUTCHours() === 21 && at.getUTCMinutes() < 5) {
+    try {
+      const cut = Date.now() - MEDIA_KEEP_DAYS * 864e5;
+      for (const k of (await kv.list('media/')).filter((x) => x.endsWith('/m')).slice(0, 400)) { const m = await kv.get(k); if (m && m.ts < cut) await kv.delPrefix(k.slice(0, -1)); }
+    } catch (e) { /* try again tomorrow */ }
   }
   if (logs.length) { const ml = (await kv.get('maillog')) || []; await kv.set('maillog', [...logs.reverse(), ...ml].slice(0, 100)); }
   return { sent, due: due.length, onboard };

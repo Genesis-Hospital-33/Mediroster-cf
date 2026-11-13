@@ -1,5 +1,5 @@
 // MediRoster on Cloudflare: serves the website files, answers /api, and runs the 5-minute reminder job.
-import { handle, runReminders } from './core.mjs';
+import { handle, runReminders, serveMedia } from './core.mjs';
 import { d1kv } from './d1kv.mjs';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
@@ -16,6 +16,8 @@ export default {
       const res = await handle({ kv: d1kv(env.DB), env, origin: url.origin, defer: (p) => ctx.waitUntil(p) }, body);
       return json(res.body, res.status);
     }
+    const mm = /^\/m\/([a-z0-9]{12,24})$/.exec(url.pathname);
+    if (mm && (req.method === 'GET' || req.method === 'HEAD')) return serveMedia({ kv: d1kv(env.DB), env }, mm[1], url.searchParams.get('t'), req.headers.get('range'));
     return env.ASSETS.fetch(req);
   },
   async scheduled(event, env, ctx) {
