@@ -168,15 +168,48 @@ const masterRec = (old = {}) => ({ id: MASTER_ID, name: 'Sohail Ahmad', role: 'm
 async function addLog(kv, name, who, msg, tz, cap = 300) {
   const l = (await kv.get(name)) || []; l.unshift({ ts: Date.now(), t: stamp(tz), who, msg }); await kv.set(name, l.slice(0, cap));
 }
-async function listAtt(kv, prefix, names) {
-  const keys = await kv.list(prefix);
-  return keys.map((k) => { const [, date, id, hhmm, d] = k.split('/'); return { id, name: (names.get(id) || {}).name || id, date, time: hhmm.slice(0, 2) + ':' + hhmm.slice(2), d: Number(d) }; });
+const r5 = (x) => Math.round(x * 1e5) / 1e5;
+async function scanRows(kv, prefix, limit, desc) {
+  if (kv.range) return kv.range(prefix, prefix + '\uffff', limit, desc);
+  const ks = (await kv.list(prefix)).sort(); if (desc) ks.reverse();
+  return Promise.all(ks.slice(0, limit).map(async (key) => ({ key, value: await kv.get(key) })));
+}
+const attRow = (key, v, names, type, own) => {
+  const q = key.split('/'), id = own ? q[1] : q[2], date = own ? q[2] : q[1], hhmm = q[3];
+  return { type, id, name: (names.get(id) || {}).name || id, date, time: hhmm.slice(0, 2) + ':' + hhmm.slice(2), d: Number(q[4]), ...(v && typeof v === 'object' && v.lat != null ? { lat: v.lat, lng: v.lng } : {}) };
+};
+// everything recorded on one day: clock-ins, clock-outs and blocked attempts (outside the zone)
+async function listAtt(kv, prefixDate, names) {
+  const date = prefixDate.split('/')[1];
+  const parts = await Promise.all([['att', 'in'], ['ato', 'out'], ['atx', 'blocked']].map(async ([pre, type]) => (await scanRows(kv, pre + '/' + date + '/', 2000, false)).map((r) => attRow(r.key, r.value, names, type, false))));
+  return parts.flat().sort((x, y) => y.time.localeCompare(x.time));
 }
 async function listOwnAtt(kv, id, names) {
-  const keys = (await kv.list('attp/' + id + '/')).sort().reverse().slice(0, 30);
-  return keys.map((k) => { const [, , date, hhmm, d] = k.split('/'); return { id, name: (names.get(id) || {}).name || id, date, time: hhmm.slice(0, 2) + ':' + hhmm.slice(2), d: Number(d) }; });
+  const parts = await Promise.all([['attp', 'in'], ['atop', 'out']].map(async ([pre, type]) => (await scanRows(kv, pre + '/' + id + '/', 30, true)).map((r) => attRow(r.key, r.value, names, type, true))));
+  return parts.flat().sort((x, y) => (y.date + y.time).localeCompare(x.date + x.time));
 }
-
+// Is this person clocked in right now (clock-in with no later clock-out, within the last 16 hours)?
+async function openSession(kv, id, w) {
+  const t0 = Date.UTC(w.y, w.m - 1, w.d), dates = [ymd(t0), ymd(t0 - 864e5)], now = Date.UTC(w.y, w.m - 1, w.d, w.h, w.mi);
+  const keyz = async (pre) => (await Promise.all(dates.map((d) => kv.list(`${pre}/${id}/${d}/`)))).flat().map((k) => { const q = k.split('/'); return q[2] + q[3]; }).sort();
+  const [ins, outs] = await Promise.all([keyz('attp'), keyz('atop')]), li = ins[ins.length - 1], lo = outs[outs.length - 1];
+  const ms = (x) => Date.UTC(+x.slice(0, 4), +x.slice(5, 7) - 1, +x.slice(8, 10), +x.slice(10, 12), +x.slice(12, 14));
+  return { li, lo, open: !!li && (!lo || lo < li) && now - ms(li) < 16 * 3600e3 };
+}
+// The shift this person is on (or about to start within an hour) right now, if any.
+async function onShiftNow(kv, cfg, me, w) {
+  const nowWall = Date.UTC(w.y, w.m - 1, w.d, w.h, w.mi), tplBy = new Map(cfg.tpl.map((t) => [t.id, t]));
+  for (const o of [-1, 0]) {
+    const date = ymd(Date.UTC(w.y, w.m - 1, w.d) + o * 864e5), part = (await kv.get('roster/' + mondayOf(date) + '/' + shardOf(me.id))) || {};
+    for (const tid of asList(part[me.id + '|' + date])) {
+      const t = tplBy.get(tid); if (!t) continue;
+      const [sh, sm] = t.start.split(':').map(Number), [eh, em] = t.end.split(':').map(Number), [y, m, d] = date.split('-').map(Number);
+      const st = Date.UTC(y, m - 1, d, sh, sm); let en = Date.UTC(y, m - 1, d, eh, em); if (en <= st) en += 864e5;
+      if (nowWall >= st - 60 * 6e4 && nowWall <= en) return t;
+    }
+  }
+  return null;
+}
 
 /* ---------- bulk roster changes (used by Import Roster and the AI Assistant) ---------- */
 const byStart = (order) => (a, b) => order.get(a).localeCompare(order.get(b));
@@ -337,7 +370,7 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
       const list = mgr || !ids ? staff : staff.filter((s) => s.id === me.id || ids.has(s.id));
       const out = {
         me: me.id, today, week: mon, dept: d || '', depts: cfg.depts, tpl: cfg.tpl, zone: cfg.zone, roster,
-        staff: list.map((s) => ({ id: s.id, name: s.name, role: s.role, designation: s.designation || '', dept: s.dept, ...(mgr ? { email: s.email || '' } : {}) })),
+        staff: list.map((s) => ({ id: s.id, name: s.name, role: s.role, designation: s.designation || '', dept: s.dept, ...(mgr ? { email: s.email || '' } : {}), ...(s.buzzer ? { buzzer: true } : {}) })),
       };
       if (mgr) {
         out.ai = !!(env.AI_API_KEY || env.GEMINI_API_KEY);
@@ -411,6 +444,7 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
     if (me.role !== 'master') { const a = await kv.get('acct/' + me.id); if (!a || a.reset || a.setup) fail(401, 'Your session expired. Please sign in again.'); }
     if (sess.exp - Date.now() < 15 * 864e5) renew.tok = await sign(env, me.id); // keeps people signed in while they use the app
     const isMaster = me.role === 'master', isMgr = me.role !== 'worker';
+    const needBuzz = () => { if (!(isMaster || me.buzzer)) fail(403, 'You do not have buzzer access.'); };
     const needMaster = () => { if (!isMaster) fail(403, 'Only the Master Admin can do that.'); };
     const needMgr = () => { if (!isMgr) fail(403, 'You do not have permission to do that.'); };
     const find = (id) => byId.get(clean(id, 40)) || fail(404, 'Staff member not found.');
@@ -428,7 +462,7 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
     const chatRoom = () => {
       if (p.room !== 'dm') return { room: 'all' };
       const o = find(p.peer);
-      if (o.id === me.id || (me.role === 'worker' && o.role === 'worker')) fail(403, 'Private messages are between a worker and an Admin or the Master Admin (or between Admins).');
+      if (o.id === me.id) fail(403, 'Choose someone else.');
       return { room: dmRoom(me.id, o.id), other: o };
     };
 
@@ -507,11 +541,11 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
       }
       case 'chatPing':
       case 'chatInit': {
-        const [allLatest, nk] = await Promise.all([latestAll(kv), kv.list('dmnew/' + me.id + '/')]);
+        const [allLatest, nk, bz] = await Promise.all([latestAll(kv), kv.list('dmnew/' + me.id + '/'), kv.get('buzz/' + me.id)]);
         const unread = nk.map((k) => k.split('/')[2]).filter((i) => byId.has(i)).map((i) => ({ id: i, name: byId.get(i).name }));
-        const out = { allLatest, unread };
+        const out = { allLatest, unread, ...(bz && bz.ts > Date.now() - 300000 ? { buzz: bz } : {}) };
         if (action === 'chatInit') {
-          out.peers = me.role === 'worker' ? staff.filter((x) => x.role !== 'worker' && x.id !== me.id).slice(0, 200).map((x) => ({ id: x.id, name: x.name, role: x.role, designation: x.designation || '' })) : [];
+          out.peers = me.role === 'worker' ? staff.filter((x) => x.id !== me.id).slice(0, 300).map((x) => ({ id: x.id, name: x.name, role: x.role, designation: x.designation || '', dept: x.dept })) : [];
           out.dms = (await kv.list('dmidx/' + me.id + '/')).map((k) => k.split('/')[2]).filter((i) => byId.has(i)).slice(0, 100).map((i) => ({ id: i, name: byId.get(i).name, role: byId.get(i).role }));
         }
         return ok(out);
@@ -651,12 +685,52 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
       case 'clockIn': {
         const lat = Number(p.lat), lng = Number(p.lng);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) fail(400, 'Your location could not be read.');
-        const d = Math.round(dist(lat, lng, cfg.zone.lat, cfg.zone.lng));
-        if (d > cfg.zone.radius) fail(403, `You are ${d} m from the hospital zone. Move within ${cfg.zone.radius} m to clock in.`);
-        const w = wall(new Date(), tz), date = ymd(Date.UTC(w.y, w.m - 1, w.d)), hhmm = String(w.h).padStart(2, '0') + String(w.mi).padStart(2, '0');
-        if ((await kv.list('attp/' + me.id + '/' + date + '/')).length) fail(409, 'You have already clocked in today.');
-        await Promise.all([kv.set(`attp/${me.id}/${date}/${hhmm}/${d}`, 1), kv.set(`att/${date}/${me.id}/${hhmm}/${d}`, 1)]);
+        const d = Math.round(dist(lat, lng, cfg.zone.lat, cfg.zone.lng)), w = wall(new Date(), tz), date = ymd(Date.UTC(w.y, w.m - 1, w.d)), hhmm = String(w.h).padStart(2, '0') + String(w.mi).padStart(2, '0');
+        if (d > cfg.zone.radius) {
+          const sh = await onShiftNow(kv, cfg, me, w);
+          if (sh) { // on shift but away from the hospital: tell the managers
+            const lk = 'awaylast/' + me.id, last = (await kv.get(lk)) || 0;
+            if (Date.now() - last > 120000) {
+              await kv.set(lk, Date.now()); await kv.set(`atx/${date}/${me.id}/${hhmm}/${d}`, { lat: r5(lat), lng: r5(lng) });
+              const far = d >= 1000 ? (d / 1000).toFixed(1) + ' km' : d + ' m';
+              await log(me.name, `Tried to clock in ${far} away from the hospital zone during the ${sh.name} shift (${r5(lat)}, ${r5(lng)})`);
+              await notify(staff.filter((x) => x.role !== 'worker' && x.id !== me.id).slice(0, 25).map((x) => x.id), { title: '⚠ Clock-in attempt away from hospital', body: `${me.name} tried to clock in ${far} away (${sh.name} shift)`, url: '/#attend', tag: 'away-' + me.id }, { ttl: 3600, urgency: 'high' });
+            }
+          }
+          fail(403, `You are ${d} m from the hospital zone. Move within ${cfg.zone.radius} m to clock in.`);
+        }
+        if ((await openSession(kv, me.id, w)).open) fail(409, 'You are already clocked in. Clock out first.');
+        const v = { lat: r5(lat), lng: r5(lng) };
+        await Promise.all([kv.set(`attp/${me.id}/${date}/${hhmm}/${d}`, v), kv.set(`att/${date}/${me.id}/${hhmm}/${d}`, v)]);
         return reply();
+      }
+      case 'clockOut': {
+        const lat = Number(p.lat), lng = Number(p.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) fail(400, 'Your location could not be read.');
+        const d = Math.round(dist(lat, lng, cfg.zone.lat, cfg.zone.lng)), w = wall(new Date(), tz), date = ymd(Date.UTC(w.y, w.m - 1, w.d)), hhmm = String(w.h).padStart(2, '0') + String(w.mi).padStart(2, '0');
+        if (!(await openSession(kv, me.id, w)).open) fail(409, 'You are not clocked in right now.');
+        const v = { lat: r5(lat), lng: r5(lng) };
+        await Promise.all([kv.set(`atop/${me.id}/${date}/${hhmm}/${d}`, v), kv.set(`ato/${date}/${me.id}/${hhmm}/${d}`, v)]);
+        return reply();
+      }
+      case 'buzzList': {
+        needBuzz();
+        return ok({ staff: staff.filter((x) => x.id !== me.id).map((x) => ({ id: x.id, name: x.name, role: x.role, designation: x.designation || '', dept: x.dept })) });
+      }
+      case 'buzz': {
+        needBuzz(); const t = find(p.id); if (t.id === me.id) fail(400, 'Choose someone else.');
+        const lk = 'buzzlast/' + me.id, last = (await kv.get(lk)) || 0; if (Date.now() - last < 2500) fail(429, 'Please wait a moment before buzzing again.');
+        await kv.set(lk, Date.now());
+        const msg = clean(p.msg, 140), ts = Date.now(), label = (me.role === 'master' ? 'Master Admin ' : me.role === 'admin' ? 'Admin ' : '') + me.name;
+        const devices = (await kv.list('push/' + t.id + '/')).length;
+        await kv.set('buzz/' + t.id, { ts, name: label, msg });
+        await notify([t.id], { title: '🔔 ' + label + ' is calling', body: msg || 'Please respond now', url: '/#buzz', tag: 'buzz-' + ts, buzz: { ts, name: label, msg } }, { ttl: 120, urgency: 'high' });
+        await log(me.name, `Buzzed ${t.name}${msg ? ': "' + msg + '"' : ''}`);
+        return ok({ ok: true, devices });
+      }
+      case 'setBuzzer': {
+        needMaster(); const s = find(p.id); if (s.role === 'master') fail(400, 'The Master Admin always has the buzzer.');
+        s.buzzer = !!p.on; await saveStaff(); await log(me.name, `${s.buzzer ? 'Gave' : 'Removed'} buzzer access ${s.buzzer ? 'to' : 'from'} ${s.name}`); return reply();
       }
       case 'previewChanges': {
         needMgr(); const list = Array.isArray(p.changes) ? p.changes.slice(0, 3000) : [];

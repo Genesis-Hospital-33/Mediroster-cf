@@ -21,12 +21,10 @@
 .my-10{margin-top:2.5rem;margin-bottom:2.5rem}
 .px-1{padding-left:0.25rem;padding-right:0.25rem}
 .px-1\.5{padding-left:0.375rem;padding-right:0.375rem}
-.px-10{padding-left:2.5rem;padding-right:2.5rem}
 .px-2{padding-left:0.5rem;padding-right:0.5rem}
 .px-3{padding-left:0.75rem;padding-right:0.75rem}
 .px-4{padding-left:1rem;padding-right:1rem}
 .px-5{padding-left:1.25rem;padding-right:1.25rem}
-.px-8{padding-left:2rem;padding-right:2rem}
 .py-0\.5{padding-top:0.125rem;padding-bottom:0.125rem}
 .py-1{padding-top:0.25rem;padding-bottom:0.25rem}
 .py-1\.5{padding-top:0.375rem;padding-bottom:0.375rem}
@@ -34,8 +32,7 @@
 .py-2\.5{padding-top:0.625rem;padding-bottom:0.625rem}
 .py-3{padding-top:0.75rem;padding-bottom:0.75rem}
 .py-4{padding-top:1rem;padding-bottom:1rem}
-.py-6{padding-top:1.5rem;padding-bottom:1.5rem}
-.py-8{padding-top:2rem;padding-bottom:2rem}
+.py-7{padding-top:1.75rem;padding-bottom:1.75rem}
 .\!p-1{padding:0.25rem!important}
 .\!py-1{padding-top:0.25rem!important;padding-bottom:0.25rem!important}
 .\!w-72{width:18rem!important}
@@ -83,7 +80,6 @@
 .border-t{border-top-width:1px}
 .border-t-2{border-top-width:2px}
 .bottom-4{bottom:1rem}
-.cursor-not-allowed{cursor:not-allowed}
 .divide-slate-100 > :not([hidden]) ~ :not([hidden]){border-color:#f1f5f9}
 .divide-y > :not([hidden]) ~ :not([hidden]){border-top-width:1px}
 .fixed{position:fixed}
@@ -99,6 +95,7 @@
 .gap-4{gap:1rem}
 .gap-5{gap:1.25rem}
 .grid{display:grid}
+.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
 .grow{flex-grow:1}
 .h-10{height:2.5rem}
 .h-11{height:2.75rem}
@@ -122,6 +119,7 @@
 .max-w-md{max-width:28rem}
 .max-w-xl{max-width:36rem}
 .mb-1{margin-bottom:0.25rem}
+.mb-2{margin-bottom:0.5rem}
 .mb-3{margin-bottom:0.75rem}
 .min-h-screen{min-height:100vh}
 .min-w-\[104px\]{min-width:104px}
@@ -136,6 +134,7 @@
 .mt-2{margin-top:0.5rem}
 .mt-3{margin-top:0.75rem}
 .mt-4{margin-top:1rem}
+.overflow-hidden{overflow:hidden}
 .overflow-x-auto{overflow-x:auto}
 .overflow-y-auto{overflow-y:auto}
 .pb-1{padding-bottom:0.25rem}
@@ -143,6 +142,7 @@
 .pr-2{padding-right:0.5rem}
 .pr-3{padding-right:0.75rem}
 .pt-1{padding-top:0.25rem}
+.pt-3{padding-top:0.75rem}
 .relative{position:relative}
 .right-0{right:0}
 .ring-2{box-shadow:0 0 0 2px var(--r,#3b82f6)}
@@ -207,7 +207,6 @@
 @media(min-width:768px){}
 @media(min-width:1024px){.lg\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.lg\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.lg\:p-14{padding:3.5rem}.lg\:p-6{padding:1.5rem}.lg\:text-4xl{font-size:2.25rem;line-height:2.5rem}}
 .hover\:bg-blue-50:hover{background-color:#eff6ff}
-.hover\:bg-emerald-700:hover{background-color:#047857}
 .hover\:bg-red-50:hover{background-color:#fef2f2}
 .hover\:bg-slate-100:hover{background-color:#f1f5f9}</style>
 <style>:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{background:#f1f5f9;color:#0f172a;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}button{touch-action:manipulation}.btn{background:#1d4ed8;color:#fff;border-radius:.5rem;padding:.55rem 1rem;font-weight:600}.btn:hover{background:#1e40af}.btn2{border:1px solid #cbd5e1;background:#fff;border-radius:.5rem;padding:.45rem .8rem;font-weight:500}.btn2:hover{background:#f1f5f9}.inp{border:1px solid #cbd5e1;border-radius:.5rem;padding:.55rem .75rem;width:100%;background:#fff;color:#0f172a}.card{background:#fff;border:1px solid #e2e8f0;border-radius:.75rem}@media print{header,.topbar,#drawer,#scrim,#pop,#toast,#banner,.noprint{display:none!important}body{background:#fff}}:root{--hdr:52px}
@@ -262,6 +261,16 @@ body.menu-open #scrim{opacity:1;pointer-events:auto}body.menu-open #drawer{trans
 .attbar{display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid #e2e8f0;background:#f8fafc;flex:none}
 .attbar img{width:48px;height:48px;object-fit:cover;border-radius:8px}.attbar .vid{width:48px;height:48px;border-radius:8px;background:#1e293b;display:grid;place-items:center;color:#fff}
 .npad{padding:10px 12px;flex:none}
+.buzzbtn{display:flex;align-items:center;gap:6px;background:#1d4ed8;color:#fff;border-radius:999px;padding:7px 14px;font-weight:600;font-size:14px;flex:none}.buzzbtn svg{width:16px;height:16px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.sheet{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:70;display:flex;align-items:flex-end;justify-content:center}
+.sheetbox{background:#fff;width:100%;max-width:520px;border-radius:20px 20px 0 0;padding:18px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:90vh;overflow-y:auto}
+.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{border:1px solid #cbd5e1;background:#f8fafc;border-radius:999px;padding:7px 12px;font-size:14px}.chip:active{background:#dbeafe;border-color:#93c5fd}
+.bigbuzz{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:14px;background:#dc2626;color:#fff;border-radius:14px;padding:15px;font-size:18px;font-weight:700}.bigbuzz svg{width:24px;height:24px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.bigbuzz:disabled{background:#94a3b8}
+#buzzov{position:fixed;inset:0;z-index:95;background:linear-gradient(160deg,#991b1b,#dc2626);display:grid;place-items:center;padding:24px;animation:bzp 1s ease-in-out infinite alternate}
+@keyframes bzp{from{filter:brightness(1)}to{filter:brightness(1.25)}}
+.bzcard{text-align:center;color:#fff;max-width:420px;width:100%}.bzicon{width:96px;height:96px;margin:0 auto 18px;border-radius:50%;background:rgba(255,255,255,.18);display:grid;place-items:center}.bzicon svg{width:52px;height:52px;stroke:#fff;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.bzname{font-size:26px;font-weight:800;line-height:1.2}.bzsub{font-size:18px;opacity:.9;margin-top:4px}.bzmsg{margin-top:18px;background:rgba(0,0,0,.25);border-radius:14px;padding:14px;font-size:20px;font-weight:600}
+.bzok{margin-top:28px;width:100%;background:#fff;color:#991b1b;border-radius:14px;padding:15px;font-size:18px;font-weight:800}
 #viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:80;display:grid;place-items:center}#viewer img{max-width:100%;max-height:100%;object-fit:contain}
 </style>
 </head><body>
@@ -344,22 +353,25 @@ cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16
 grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
 spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>',
 up:'<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-chat:'<path d="M21 12a8 8 0 01-11.6 7.1L4 20l1-4.6A8 8 0 1121 12z"/>',users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6M16 4.5a3.5 3.5 0 010 7M18 14.5c2.5.6 4 2.7 4 5.5"/>',
+buzz:'<path d="M6 8a6 6 0 0112 0c0 7 3 9 3 9H3s3-2 3-9M10 21a2 2 0 004 0M2 8c.5-2 1.5-3.5 3-4.5M22 8c-.5-2-1.5-3.5-3-4.5"/>',chat:'<path d="M21 12a8 8 0 01-11.6 7.1L4 20l1-4.6A8 8 0 1121 12z"/>',users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6M16 4.5a3.5 3.5 0 010 7M18 14.5c2.5.6 4 2.7 4 5.5"/>',
 bld:'<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M10 21v-4h4v4"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
 pin:'<path d="M12 21s7-6.2 7-11.5A7 7 0 005 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',file:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/>',
 out:'<path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9"/>',back:'<path d="M15 5l-7 7 7 7"/>',clip:'<path d="M20 11l-8.5 8.5a5 5 0 01-7-7L13 4a3.3 3.3 0 014.7 4.7L9.5 17a1.7 1.7 0 01-2.4-2.4L14 7.7"/>',
 send:'<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>',plus:'<path d="M12 5v14M5 12h14"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',video:'<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/>'};
 const ic=n=>'<svg viewBox="0 0 24 24" aria-hidden="true">'+(IC[n]||'')+'</svg>';
-const TABIC={roster:'cal',mine:'calc',general:'grid',assistant:'spark',import:'up',leave:'sun',chat:'chat',staff:'users',depts:'bld',shifts:'clock',attend:'pin',logs:'file'};
-function tabsFor(r){return r==='master'?[['roster','Roster'],['assistant','AI Assistant'],['import','Import Roster'],['leave','Leave'],['chat','Chat'],['staff','Staff'],['depts','Departments'],['shifts','Shift Templates'],['attend','Attendance &amp; Zone'],['logs','System Logs']]
- :r==='admin'?[['roster','Roster'],['assistant','AI Assistant'],['import','Import Roster'],['leave','Leave'],['chat','Chat'],['attend','Attendance']]:[['mine','Personal Roster'],['general','General Roster'],['leave','Leave'],['chat','Chat'],['attend','Clock In']]}
+const TABIC={roster:'cal',mine:'calc',general:'grid',assistant:'spark',import:'up',leave:'sun',chat:'chat',buzzer:'buzz',staff:'users',depts:'bld',shifts:'clock',attend:'pin',logs:'file'};
+function tabsBase(r){return r==='master'?[['roster','Roster'],['assistant','AI Assistant'],['import','Import Roster'],['leave','Leave'],['chat','Chat'],['staff','Staff'],['depts','Departments'],['shifts','Shift Templates'],['attend','Attendance &amp; Zone'],['logs','System Logs']]
+ :r==='admin'?[['roster','Roster'],['assistant','AI Assistant'],['import','Import Roster'],['leave','Leave'],['chat','Chat'],['attend','Attendance']]:[['mine','Personal Roster'],['general','General Roster'],['leave','Leave'],['chat','Chat'],['attend','Attendance']]}
+const canBuzz=()=>!!user&&(user.role==='master'||!!user.buzzer);
+function tabsFor(r){const t=tabsBase(r);if(canBuzz()){const i=t.findIndex(x=>x[0]==='chat');t.splice(i+1,0,['buzzer','Buzzer'])}return t}
 function pendingHTML(){const p=db.pending||[];if(!p.length)return '';
  return `<div class="rounded-xl border-2 border-red-300 bg-red-50 p-4"><div class="font-bold text-red-800">⚠ Pending Approvals (${p.length})</div><div class="text-sm text-red-700">These staff cannot sign in until a passcode reset is approved.</div>`+
  p.map(s=>`<div class="flex flex-wrap items-center justify-between gap-2 bg-white rounded-lg border border-red-200 p-3 mt-2"><div><span class="font-semibold">${esc(s.name)}</span> <span class="font-mono text-sm text-slate-500">${s.id}</span><div class="text-xs text-slate-500">Requested ${esc(s.resetAt||'')}</div></div><button class="btn" onclick="approve('${s.id}')">Approve &amp; Issue Temporary Passcode</button></div>`).join('')+'</div>'}
 function noteHTML(){return note?`<div class="rounded-xl border-2 border-emerald-300 bg-emerald-50 p-4 space-y-2"><div class="font-bold text-emerald-900">${esc(note.title)}</div><textarea id="notetxt" readonly rows="3" class="inp text-sm">${esc(note.text)}</textarea><div class="flex gap-2"><button class="btn" onclick="copyNote()">Copy message</button><button class="btn2" onclick="note=null;render()">Dismiss</button></div><div class="text-xs text-slate-600">Share this with the staff member through a secure channel.</div></div>`:''}
 function copyNote(){const t=document.getElementById('notetxt');t.select();const ok=()=>toast('Message copied.');try{navigator.clipboard.writeText(t.value).then(ok,()=>{document.execCommand('copy');ok()})}catch(e){document.execCommand('copy');ok()}}
 async function approve(id){const s=db.staff.find(x=>x.id===id);try{const j=await api('approve',{id});note={title:`Reset approved for ${s.name} (${s.id})`,text:`Your passcode reset has been approved. Staff ID: ${s.id}, Temporary Passcode: ${j.temp}. You will be asked to set a new passcode when you log in.`};render()}catch(e){}}
-function menuGroups(r){return r==='master'?[['roster','assistant','import'],['leave','chat'],['staff','depts','shifts','attend','logs']]:r==='admin'?[['roster','assistant','import'],['leave','chat','attend']]:[['mine','general'],['leave','chat','attend']]}
+function menuGroups(r){const g=menuGroups0(r);if(canBuzz())g.forEach(x=>{const i=x.indexOf('chat');if(i>=0)x.splice(i+1,0,'buzzer')});return g}
+function menuGroups0(r){return r==='master'?[['roster','assistant','import'],['leave','chat'],['staff','depts','shifts','attend','logs']]:r==='admin'?[['roster','assistant','import'],['leave','chat','attend']]:[['mine','general'],['leave','chat','attend']]}
 function initials(n){return String(n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}
 function drawerHTML(){const rl={master:'Master Admin',admin:'Admin',worker:'Worker'}[user.role],lab=Object.fromEntries(tabsFor(user.role));
  const item=id=>`<button class="mi ${tab===id?'on':''}" onclick="goTab('${id}')">${ic(TABIC[id])}<span>${lab[id]}</span>${id==='chat'?'<span id="chatdot" style="flex:none"></span>':''}${id==='leave'&&isMgr()&&db.leavePending?`<b class="cnt">${db.leavePending}</b>`:''}</button>`;
@@ -380,6 +392,7 @@ function render(){
   <main class="${tab==='chat'?'chatmain':'p-4 lg:p-6 max-w-7xl mx-auto space-y-4'}">${tab==='chat'?chatView():(pushAsk?pushBanner():'')+(user.role==='master'?statusHTML():'')+(isMgr()?pendingHTML()+noteHTML()+(db.leavePending&&tab!=='leave'?`<div class="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 flex flex-wrap items-center justify-between gap-2"><div class="font-semibold text-amber-900">${db.leavePending} leave request${db.leavePending===1?'':'s'} waiting for a decision</div><button class="btn" onclick="tab='leave';render()">Review</button></div>`:''):'')+view()}</main>`;
  if(tab==='attend'&&user.role==='worker'&&loc.status==='idle')checkLoc();
  if(tab==='staff'&&user.role==='master')loadStatus();
+ if(tab==='buzzer'&&!bz.list)loadBuzzList();
  if(tab!=='leave')leaveData=null;else if(leaveData===null)loadLeave();
  if(tab==='chat'){if(!cs.loaded)chatInit();startChatPoll();const c=document.getElementById('cin');if(c&&cs.draft){c.value=cs.draft;grow(c)}const mb=document.getElementById('chatmsgs');if(mb)mb.scrollTop=mb.scrollHeight}else stopChatPoll();
  updChatDot();
@@ -387,7 +400,7 @@ function render(){
 }
 function view(){switch(tab){
  case'roster':return rosterView(isMgr());case'general':return rosterView(false);case'mine':return mine();
- case'staff':return staffView();case'leave':return leaveView();case'assistant':return assistantView();case'import':return importView();case'depts':return deptView();case'shifts':return shiftView();
+ case'staff':return staffView();case'buzzer':return buzzerView();case'leave':return leaveView();case'assistant':return assistantView();case'import':return importView();case'depts':return deptView();case'shifts':return shiftView();
  case'attend':return user.role==='worker'?clockView():attendAdmin();case'logs':return logView()}return ''}
 
 /* ---------- ROSTER GRID ---------- */
@@ -439,12 +452,13 @@ function staffView(){const {all,pages,rows}=staffRows();return `<h2 class="text-
   <textarea id="bulk" rows="4" class="inp text-sm font-mono" placeholder="Anita Rao, anita@gmail.com, Worker, ICU, Staff Nurse"></textarea>
   <div class="flex gap-2"><button class="btn2" onclick="bulkAdd()">Import list</button><button class="btn2" onclick="exportStaff()">Download staff list (CSV)</button></div></div>
  <div class="card p-3 flex flex-wrap items-center gap-3"><input class="inp !w-72" placeholder="Search name, ID, email, department" value="${esc(sq)}" onchange="setQ(this.value)"><div class="text-sm text-slate-500">${all.length} shown · page ${spage+1} of ${pages}</div><button class="btn2" ${spage<=0?'disabled':''} onclick="pg(-1)">‹ Prev</button><button class="btn2" ${spage>=pages-1?'disabled':''} onclick="pg(1)">Next ›</button></div>
- <div class="card overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-50 text-left text-slate-600"><tr><th class="p-3">Name</th><th>Designation</th><th>Department</th><th>Staff ID</th><th>Email</th><th>Permission</th><th>Status</th><th></th></tr></thead><tbody>`+
+ <div class="card overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-50 text-left text-slate-600"><tr><th class="p-3">Name</th><th>Designation</th><th>Department</th><th>Staff ID</th><th>Email</th><th>Permission</th><th>Buzzer</th><th>Status</th><th></th></tr></thead><tbody>`+
  rows.map(s=>{const m=s.role==='master',st=stat[s.id];return `<tr class="border-t border-slate-100 align-top"><td class="p-3"><div class="font-semibold">${esc(s.name)}</div><div class="text-xs text-slate-500">${esc(s.dept)}</div></td>
  <td class="pr-2"><input class="inp !py-1 min-w-[150px]" value="${esc(s.designation)}" placeholder="No badge" onchange="setDes('${s.id}',this.value)"></td>
  <td class="pr-2"><select class="inp !py-1 min-w-[120px]" onchange="setStaffDept('${s.id}',this.value)">${(db.depts.includes(s.dept)?db.depts:[...db.depts,s.dept]).map(d=>`<option value="${esc(d)}" ${d===s.dept?'selected':''}>${esc(d)}</option>`).join('')}</select></td>
  <td class="font-mono pr-2">${s.id}</td><td class="text-xs pr-2">${esc(s.email)}</td>
  <td class="pr-2">${m?'<span class="px-2 py-1 rounded-md bg-slate-900 text-white text-xs font-bold">Master Admin</span>':`<select class="inp !py-1" onchange="setRole('${s.id}',this.value)"><option value="worker" ${s.role==='worker'?'selected':''}>Worker</option><option value="admin" ${s.role==='admin'?'selected':''}>Admin</option></select>`}</td>
+ <td class="pr-2 text-xs">${m?'<span class="text-slate-500">Always</span>':`<label class="whitespace-nowrap"><input type="checkbox" ${s.buzzer?'checked':''} onchange="setBuzzer('${s.id}',this.checked)"> Allowed</label>`}</td>
  <td class="pr-2 text-xs">${m?'<span class="text-emerald-700 font-semibold">Active</span>':!st?'…':st.reset?'<span class="text-red-700 font-semibold">Reset pending</span>':st.setup?`<span class="text-amber-700 font-semibold">Setup pending</span><div>Temp: <span class="font-mono">${esc(st.temp||'')}</span></div>`:'<span class="text-emerald-700 font-semibold">Active</span>'}</td>
  <td class="pr-3 text-right">${m?'':`<button class="text-red-700 text-xs font-semibold" onclick="delStaff('${s.id}')">Remove</button>`}</td></tr>`}).join('')+'</tbody></table></div>'}
 async function loadStatus(){const ids=staffRows().rows.filter(s=>s.role!=='master'&&!stat[s.id]).map(s=>s.id);if(!ids.length)return;
@@ -455,6 +469,7 @@ async function bulkAdd(){const rows=$v('bulk').split(/\n/).map(l=>l.trim()).filt
  try{const j=await api('bulkAdd',{rows});render();toast(j.added+' accounts created.'+(j.skipped.length?' Skipped: '+j.skipped.slice(0,3).join('; '):''))}catch(e){}}
 function exportStaff(){const rows=[['Name','Staff ID','Email','Permission','Designation','Department'],...db.staff.map(s=>[s.name,s.id,s.email||'',s.role,s.designation||'',s.dept])];
  const csv=rows.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='mediroster-staff.csv';a.click()}
+async function setBuzzer(id,on){try{await api('setBuzzer',{id,on});toast(on?'Buzzer access given.':'Buzzer access removed.')}catch(e){}render()}
 async function setDes(id,v){try{await api('setDes',{id,v})}catch(e){}render()}
 async function setStaffDept(id,v){try{await api('setStaffDept',{id,dept:v})}catch(e){}render()}
 async function setRole(id,r){try{await api('setRole',{id,r})}catch(e){}render()}
@@ -481,23 +496,33 @@ function checkLoc(){const z=db.zone;loc.status='loading';
  if(!navigator.geolocation){loc.status='err';loc.msg='Location is not supported in this browser.';return render()}
  navigator.geolocation.getCurrentPosition(p=>{loc.lat=p.coords.latitude;loc.lng=p.coords.longitude;loc.d=Math.round(dist(loc.lat,loc.lng,z.lat,z.lng));loc.status='ok';if(tab==='attend')render()},e=>{loc.status='err';loc.msg='Could not read your location ('+e.message+'). Allow location access in your browser and try again.';if(tab==='attend')render()},{enableHighAccuracy:true,timeout:10000})}
 function setMode(m){loc={mode:m,status:'idle'};render()}
-function clockView(){const z=db.zone,inZ=loc.status==='ok'&&loc.d<=z.radius,rec=db.att.find(a=>a.id===user.id&&a.date===today()),t=shifts(user.id,today());
- return `<h2 class="text-xl font-bold">Geofenced Attendance</h2>
+const ownRows=()=>db.att.filter(a=>a.id===user.id);
+function attState(){const rs=ownRows(),y=iso(addDays(new Date(today()+'T00:00'),-1)),k=a=>a.date+' '+a.time,desc=(a,b)=>k(b).localeCompare(k(a));
+ const ins=rs.filter(a=>a.type==='in'&&a.date>=y).sort(desc),outs=rs.filter(a=>a.type==='out'&&a.date>=y).sort(desc),li=ins[0],lo=outs[0];
+ const age=li?Date.now()-new Date(li.date+'T'+li.time).getTime():0;return {li,lo,open:!!li&&(!lo||k(lo)<k(li))&&age<57600000}}
+const mapLink=r=>r.lat!=null?` <a class="text-blue-700 underline" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${r.lat},${r.lng}">map</a>`:'';
+const farText=d=>d>1000?(d/1000).toFixed(1)+' km':d+' m';
+function clockView(){const z=db.zone,inZ=loc.status==='ok'&&loc.d<=z.radius,st=attState(),t=shifts(user.id,today()),y=iso(addDays(new Date(today()+'T00:00'),-1));
+ const recent=ownRows().filter(a=>a.date>=y&&a.type!=='blocked').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)),canIn=inZ&&!st.open,canOut=st.open&&loc.status==='ok';
+ return `<h2 class="text-xl font-bold">Attendance</h2>
  <div class="card p-5 space-y-4"><div class="flex flex-wrap justify-between gap-3"><div><div class="text-sm text-slate-500">Designated zone</div><div class="font-semibold">${esc(z.name)} · ${z.radius} m radius</div></div>
-  <div><div class="text-sm text-slate-500">Today</div><div class="font-semibold">${onLeave(user.id,today())?'On leave today':t.length?t.map(x=>esc(x.name)+' '+x.start+'–'+x.end).join(', '):'No shift assigned'}</div></div>
-  </div>
-  <div class="text-center py-4">${rec?`<div class="inline-block rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-800 px-8 py-6"><div class="text-2xl font-bold">✓ Clocked in at ${rec.time}</div><div class="text-sm">Attendance recorded for today.</div></div>`:
-  `<button ${inZ?'':'disabled'} onclick="clockIn()" class="rounded-2xl px-10 py-8 text-2xl font-bold text-white ${inZ?'bg-emerald-600 hover:bg-emerald-700':'bg-slate-400 cursor-not-allowed'}">${loc.status==='loading'?'Locating…':inZ?'Tap to Clock In':'Clock In Locked'}</button>`}
-  <div class="mt-3 text-sm ${inZ||rec?'text-emerald-700':'text-red-700'}">${loc.status==='ok'?(inZ?`You are inside the hospital zone (${loc.d} m from centre).`:`Location error: you are ${loc.d>1000?(loc.d/1000).toFixed(1)+' km':loc.d+' m'} from the hospital zone. Move within ${z.radius} m to clock in.`):loc.status==='err'?loc.msg:'Checking location…'}</div>
-  <button class="btn2 mt-3" onclick="loc.status='idle';render()">Re-check location</button></div></div>`+histTable(db.att.filter(a=>a.id===user.id),'My attendance history')}
-async function clockIn(){if(!(loc.status==='ok'&&loc.d<=db.zone.radius))return toast('Outside the hospital zone.');try{await api('clockIn',{lat:loc.lat,lng:loc.lng});render();toast('Clock-in recorded.')}catch(e){}}
-function attPicker(){return `<div class="card p-4 flex items-end gap-3"><div><label class="text-xs font-semibold">Show clock-ins for date</label><input type="date" class="inp" value="${attDate||today()}" onchange="loadAtt(this.value)"></div></div>`}
+  <div><div class="text-sm text-slate-500">Today</div><div class="font-semibold">${onLeave(user.id,today())?'On leave today':t.length?t.map(x=>esc(x.name)+' '+x.start+'–'+x.end).join(', '):'No shift assigned'}</div></div></div>
+  ${st.open?`<div class="rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-800 px-5 py-3 text-center"><div class="text-lg font-bold">You are clocked in</div><div class="text-sm">Since ${st.li.time}${st.li.date!==today()?' (yesterday)':''}. Clock out when your shift ends.</div></div>`:''}
+  <div class="grid grid-cols-2 gap-3"><button ${canIn?'':'disabled'} onclick="clockIn()" class="rounded-2xl py-7 text-xl font-bold text-white ${canIn?'bg-emerald-600':'bg-slate-400'}">${loc.status==='loading'?'Locating…':'Clock In'}</button>
+   <button ${canOut?'':'disabled'} onclick="clockOut()" class="rounded-2xl py-7 text-xl font-bold text-white ${canOut?'bg-red-600':'bg-slate-400'}">Clock Out</button></div>
+  <div class="text-sm text-center ${inZ?'text-emerald-700':loc.status==='ok'?'text-red-700':'text-slate-600'}">${loc.status==='ok'?(inZ?`You are inside the hospital zone (${loc.d} m from centre).`:`You are ${farText(loc.d)} from the hospital zone. Clock In works only within ${z.radius} m. Clock Out records where you are.`):loc.status==='err'?loc.msg:'Checking location…'}</div>
+  <div class="text-center"><button class="btn2" onclick="loc.status='idle';render()">Re-check location</button></div>
+  ${recent.length?`<div class="border-t border-slate-200 pt-3 space-y-1 text-sm">${recent.map(a=>`<div>${a.type==='in'?'✅ Clocked in':'🔴 Clocked out'} at <b>${a.time}</b>${a.date!==today()?' ('+fmtD(a.date)+')':''} · ${farText(a.d)} from centre${mapLink(a)}</div>`).join('')}</div>`:''}</div>`+histTable(db.att.filter(a=>a.id===user.id),'My attendance history')}
+async function clockIn(){if(!(loc.status==='ok'&&loc.d<=db.zone.radius))return toast('Outside the hospital zone.');try{await api('clockIn',{lat:loc.lat,lng:loc.lng});render();toast('Clocked in. Your location was recorded.')}catch(e){}}
+async function clockOut(){if(loc.status!=='ok')return toast('Waiting for your location. Tap Re-check location.');try{await api('clockOut',{lat:loc.lat,lng:loc.lng});render();toast('Clocked out. Your location was recorded.')}catch(e){}}
+function attPicker(){return `<div class="card p-4 flex items-end gap-3"><div><label class="text-xs font-semibold">Show attendance for date</label><input type="date" class="inp" value="${attDate||today()}" onchange="loadAtt(this.value)"></div></div>`}
 async function loadAtt(d){attDate=d;if(d===today()){attRows=null;return render()}try{const j=await api('attDay',{date:d});attRows=j.rows}catch(e){}render()}
-function histTable(a,t){return `<div class="card overflow-x-auto"><div class="p-3 font-bold">${t} <span class="font-normal text-slate-500">(${a.length})</span></div><table class="w-full text-sm"><thead class="bg-slate-50 text-left text-slate-600"><tr><th class="p-3">Date</th><th>Staff</th><th>Time</th><th>Distance</th></tr></thead><tbody>`+(a.length?a.slice().sort((x,y)=>(y.date+y.time).localeCompare(x.date+x.time)).slice(0,300).map(r=>`<tr class="border-t border-slate-100"><td class="p-3">${fmtD(r.date)}</td><td>${esc(r.name)}</td><td>${r.time}</td><td>${r.d} m</td></tr>`).join(''):'<tr><td class="p-3 text-slate-500" colspan="4">No records yet.</td></tr>')+'</tbody></table></div>'}
+const ATT_TYPE={in:['Clock in','bg-emerald-100 text-emerald-800'],out:['Clock out','bg-slate-200 text-slate-700'],blocked:['Blocked: outside zone','bg-red-100 text-red-800']};
+function histTable(a,t){return `<div class="card overflow-x-auto"><div class="p-3 font-bold">${t} <span class="font-normal text-slate-500">(${a.length})</span></div><table class="w-full text-sm"><thead class="bg-slate-50 text-left text-slate-600"><tr><th class="p-3">Date</th><th>Staff</th><th>Action</th><th>Time</th><th>Distance</th><th>Location</th></tr></thead><tbody>`+(a.length?a.slice().sort((x,y)=>(y.date+y.time).localeCompare(x.date+x.time)).slice(0,300).map(r=>{const ty=ATT_TYPE[r.type]||ATT_TYPE.in;return `<tr class="border-t border-slate-100"><td class="p-3">${fmtD(r.date)}</td><td>${esc(r.name)}</td><td><span class="px-2 py-0.5 rounded-md text-xs font-semibold ${ty[1]}">${ty[0]}</span></td><td>${r.time}</td><td>${farText(r.d)}</td><td>${r.lat!=null?mapLink(r).trim():'–'}</td></tr>`}).join(''):'<tr><td class="p-3 text-slate-500" colspan="6">No records yet.</td></tr>')+'</tbody></table></div>'}
 function attendAdmin(){const z=db.zone,m=user.role==='master';
  return `<h2 class="text-xl font-bold">${m?'Attendance &amp; Hospital Zone':'Attendance Records'}</h2>`+(m?`<div class="card p-4 grid sm:grid-cols-4 gap-3 items-end"><div class="sm:col-span-4 text-sm text-slate-500">Workers can only clock in inside this circle.</div>
  <div><label class="text-xs font-semibold">Zone name</label><input id="zn" class="inp" value="${esc(z.name)}"></div><div><label class="text-xs font-semibold">Latitude</label><input id="zla" class="inp" value="${z.lat}"></div><div><label class="text-xs font-semibold">Longitude</label><input id="zlo" class="inp" value="${z.lng}"></div><div><label class="text-xs font-semibold">Radius (metres)</label><input id="zr" class="inp" value="${z.radius}"></div>
- <button class="btn" onclick="saveZone()">Save zone</button><button class="btn2" onclick="useHere()">Use my current location</button></div>`:'')+attPicker()+histTable(attRows||db.att,'Clock-ins on '+(attDate||today()))}
+ <button class="btn" onclick="saveZone()">Save zone</button><button class="btn2" onclick="useHere()">Use my current location</button></div>`:'')+attPicker()+histTable(attRows||db.att,'Attendance on '+(attDate||today()))}
 async function saveZone(){try{await api('saveZone',{name:$v('zn'),lat:$v('zla'),lng:$v('zlo'),radius:$v('zr')});toast('Zone saved.');render()}catch(e){}}
 function useHere(){if(!navigator.geolocation)return toast('Geolocation unavailable here.');navigator.geolocation.getCurrentPosition(p=>{document.getElementById('zla').value=p.coords.latitude.toFixed(6);document.getElementById('zlo').value=p.coords.longitude.toFixed(6);toast('Coordinates filled. Press Save zone.')},e=>toast('GPS blocked: '+e.message+'. Type coordinates manually.'),{timeout:8000})}
 
@@ -534,11 +559,11 @@ function chatSeen(){try{return Number(localStorage.getItem(seenKey())||0)}catch(
 function chatMarkSeen(ts){try{if(ts>chatSeen())localStorage.setItem(seenKey(),String(ts))}catch(e){}}
 function chatUnreadAny(){return !!user&&((cs.allLatest>chatSeen()&&!(tab==='chat'&&cs.view==='room'&&cs.room==='all'))||cs.unread.length>0)}
 function updChatDot(){const on=chatUnreadAny(),e=document.getElementById('chatdot'),m=document.getElementById('menudot');if(e)e.innerHTML=on?'<i class="dot"></i>':'';if(m)m.innerHTML=on?'<i class="dot abs"></i>':''}
-async function chatPing(){if(!user||document.hidden)return;try{const j=await api('chatPing',{},1);cs.allLatest=j.allLatest||0;cs.unread=j.unread||[];updChatDot()}catch(e){}}
+async function chatPing(){if(!user||document.hidden)return;try{const j=await api('chatPing',{},1);chkBuzz(j);cs.allLatest=j.allLatest||0;cs.unread=j.unread||[];updChatDot()}catch(e){}}
 function drawChat(){const m=document.querySelector('.chatmain');if(m&&tab==='chat'&&cs.view!=='room'){m.innerHTML=chatView();updChatDot()}}
-async function chatInit(){cs.loaded=true;try{const j=await api('chatInit',{},1);cs.peers=j.peers||[];cs.dms=j.dms||[];cs.unread=j.unread||[];cs.allLatest=j.allLatest||0}catch(e){toast(e.message)}
+async function chatInit(){cs.loaded=true;try{const j=await api('chatInit',{},1);chkBuzz(j);cs.peers=j.peers||[];cs.dms=j.dms||[];cs.unread=j.unread||[];cs.allLatest=j.allLatest||0}catch(e){toast(e.message)}
  if(tab==='chat'){if(cs.view==='room')updChatDot();else render()}}
-async function chatListPoll(){try{const j=await api('chatInit',{},1);cs.peers=j.peers||[];cs.dms=j.dms||[];cs.unread=j.unread||[];cs.allLatest=j.allLatest||0;if(cs.view==='list')drawChat()}catch(e){}}
+async function chatListPoll(){try{const j=await api('chatInit',{},1);chkBuzz(j);cs.peers=j.peers||[];cs.dms=j.dms||[];cs.unread=j.unread||[];cs.allLatest=j.allLatest||0;if(cs.view==='list')drawChat()}catch(e){}}
 function startChatPoll(){stopChatPoll();cs.poll=setInterval(()=>{if(document.hidden||tab!=='chat')return;if(cs.view==='room')chatLoad(false);else if(cs.view==='list')chatListPoll()},6000)}
 function stopChatPoll(){clearInterval(cs.poll)}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&user&&tab==='chat'&&cs.view==='room')chatLoad(false)});
@@ -577,7 +602,9 @@ async function chatOpen(room,peer){cs.room=room;cs.peer=peer||null;cs.msgs=[];cs
  tab='chat';render();await chatLoad(true)}
 function chatBack(){cs.view='list';cs.room='all';cs.peer=null;cs.msgs=[];cs.att=null;cs.draft='';render();chatListPoll()}
 function chatNew(){cs.view='new';render()}
-async function openLink(h){const m=/dm=([A-Za-z0-9-]+)/.exec(h||'');if(!m||!user||!db)return false;try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}
+async function openLink(h){h=String(h||'');if(!user||!db)return false;const m=/dm=([A-Za-z0-9-]+)/.exec(h);
+ if(!m){if(/attend|buzz/.test(h)){try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}closeMenu();if(/attend/.test(h))goTab('attend');else chatPing();return true}return false}
+ try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}
  closeMenu();if(!cs.loaded){cs.loaded=true;try{const j=await api('chatInit',{},1);cs.peers=j.peers||[];cs.dms=j.dms||[];cs.unread=j.unread||[];cs.allLatest=j.allLatest||0}catch(e){}}
  await chatOpen('dm',m[1]);return true}
 function chatDot(on){return on?'<i class="dot"></i>':''}
@@ -633,6 +660,37 @@ async function chatSend(){if(cs.sending)return;const el=document.getElementById(
  catch(e){if(tmp){tmp.remove();el.value=text;grow(el)}toast(e.message)}
  setSending(false);refreshAtt()}
 async function chatDel(k){if(!confirm('Delete this message for everyone?'))return;try{await api('chatDelete',{k},1);cs.msgs=cs.msgs.filter(m=>m.k!==k);const box=document.getElementById('chatmsgs');if(box){const e=[...box.children].find(x=>x.dataset&&x.dataset.k===k);if(e)e.remove()}}catch(e){toast(e.message)}}
+
+
+/* ---------- BUZZER ---------- */
+let bz={list:null,q:'',sel:null,msg:'',busy:false,sent:{}};
+const BUZZ_MSGS=['Please come to my office','Urgent: report immediately','Call me back','Come to reception','Emergency: respond now','Are you available?','Meeting in 5 minutes'];
+async function loadBuzzList(){try{const j=await api('buzzList',{},1);bz.list=j.staff}catch(e){bz.list=[];toast(e.message)}if(tab==='buzzer')render()}
+function bzRows(){const q=bz.q.toLowerCase();return (bz.list||[]).filter(s=>!q||(s.name+' '+s.id+' '+(s.dept||'')+' '+(s.designation||'')).toLowerCase().includes(q)).slice(0,150).map(s=>`<button class="crow" onclick="bzOpen('${s.id}')"><span class="av">${esc(initials(s.name))}</span><div class="cmid"><b>${esc(s.name)}</b><small>${roleName(s.role)}${s.designation?' · '+esc(s.designation):''}${s.dept?' · '+esc(s.dept):''}${bz.sent[s.id]?' · buzzed '+bz.sent[s.id]:''}</small></div><span class="buzzbtn">${ic('buzz')} Buzz</span></button>`).join('')||'<div class="cempty">No one found.</div>'}
+function buzzerView(){const head='<div><h2 class="text-xl font-bold">Buzzer</h2><p class="text-sm text-slate-500">Tap a person to call them. Their phone vibrates and sounds an alarm, with a notification from MediRoster.</p></div>';
+ if(!bz.list)return head+'<div class="text-sm text-slate-500">Loading…</div>';
+ return head+`<input id="bzq" class="inp" placeholder="Search name or department" value="${esc(bz.q)}" oninput="bz.q=this.value;document.getElementById('bzlist').innerHTML=bzRows()" autocomplete="off"><div class="card overflow-hidden" id="bzlist">${bzRows()}</div>${bz.sel?bzSheet():''}`}
+function bzSheet(){const t=bz.sel;return `<div class="sheet" onclick="if(event.target===this)bzClose()"><div class="sheetbox"><div class="flex items-center gap-3"><span class="av">${esc(initials(t.name))}</span><div><div class="font-bold text-lg">${esc(t.name)}</div><div class="text-xs text-slate-500">${roleName(t.role)}${t.dept?' · '+esc(t.dept):''}</div></div></div>
+ <div class="text-xs font-semibold text-slate-500 mt-4 mb-2">MESSAGE (OPTIONAL)</div><div class="chips">${BUZZ_MSGS.map((m,i)=>`<button class="chip" onclick="bzPick(${i})">${esc(m)}</button>`).join('')}</div>
+ <input id="bzmsg" class="inp mt-3" maxlength="140" placeholder="Or type your own message" value="${esc(bz.msg)}" oninput="bz.msg=this.value">
+ <button class="bigbuzz" ${bz.busy?'disabled':''} onclick="sendBuzz()">${ic('buzz')} ${bz.busy?'Buzzing…':'Buzz '+esc(t.name.split(' ')[0])}</button><button class="btn2 w-full mt-2" onclick="bzClose()">Cancel</button></div></div>`}
+function bzOpen(id){bz.sel=(bz.list||[]).find(x=>x.id===id)||null;bz.msg='';render()}
+function bzClose(){bz.sel=null;bz.msg='';render()}
+function bzPick(i){bz.msg=BUZZ_MSGS[i];const e=document.getElementById('bzmsg');if(e)e.value=bz.msg}
+async function sendBuzz(){const t=bz.sel;if(!t||bz.busy)return;bz.busy=true;render();
+ try{const j=await api('buzz',{id:t.id,msg:(bz.msg||'').trim()},1);bz.sent[t.id]=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});bz.sel=null;bz.msg='';
+  toast(j.devices?'Buzzed '+t.name+'.':t.name+' has not turned on notifications on any device, so this buzz may not reach them.')}catch(e){toast(e.message)}
+ bz.busy=false;render()}
+/* the person being called: alarm for 2 seconds, vibration and a full-screen call card */
+function alarm(){try{navigator.vibrate&&navigator.vibrate([400,150,400,150,400,150,400])}catch(e){}
+ try{const A=window.AudioContext||window.webkitAudioContext,c=new A();if(c.resume)c.resume();const g=c.createGain();g.gain.value=.5;g.connect(c.destination);
+  for(let i=0;i<8;i++){const o=c.createOscillator();o.type='square';o.frequency.value=i%2?660:990;o.connect(g);o.start(c.currentTime+i*.25);o.stop(c.currentTime+i*.25+.2)}setTimeout(()=>{try{c.close()}catch(e){}},2600)}catch(e){}}
+function fireBuzz(b){if(!b||!user)return;const k='mr_buzz_'+user.id;let seen=0;try{seen=Number(localStorage.getItem(k)||0)}catch(e){}if(b.ts<=seen)return;try{localStorage.setItem(k,String(b.ts))}catch(e){}
+ const old=document.getElementById('buzzov');if(old)old.remove();const v=document.createElement('div');v.id='buzzov';
+ v.innerHTML=`<div class="bzcard"><div class="bzicon">${ic('buzz')}</div><div class="bzname">${esc(b.name)}</div><div class="bzsub">is calling you</div>${b.msg?`<div class="bzmsg">${esc(b.msg)}</div>`:''}<button class="bzok" onclick="document.getElementById('buzzov').remove()">OK, I'm coming</button></div>`;
+ document.body.appendChild(v);alarm()}
+const chkBuzz=j=>{if(j&&j.buzz)fireBuzz(j.buzz)};
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&user)chatPing()});
 
 /* ---------- LEAVE ---------- */
 function daysText(days){const d=[...days].sort(),runs=[];d.forEach(x=>{const l=runs[runs.length-1];if(l&&Date.parse(x)-Date.parse(l[1])===864e5)l[1]=x;else runs.push([x,x])});return runs.map(r=>r[0]===r[1]?fmtD(r[0]):fmtD(r[0])+' to '+fmtD(r[1])).join(', ')}
@@ -822,7 +880,7 @@ async function boot(){if(!token){loginView();prefill();return}
   document.getElementById('app').innerHTML='<div class="p-8 text-center space-y-3"><div class="text-lg font-bold">Cannot reach MediRoster right now</div><div class="text-slate-500 text-sm">You are still signed in. Check your internet connection. Trying again...</div><button class="btn" onclick="boot()">Try again</button></div>';
   clearTimeout(boot.t);boot.t=setTimeout(boot,4000)}}
 try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
-if(navigator.serviceWorker)navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.open)openLink(e.data.open)});
+if(navigator.serviceWorker)navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.open)openLink(e.data.open);if(e.data&&e.data.buzz)fireBuzz(e.data.buzz)});
 window.addEventListener('hashchange',()=>openLink(location.hash));
 let deferredPrompt=null;
 if(window.addEventListener)window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e});
