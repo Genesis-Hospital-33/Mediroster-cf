@@ -313,15 +313,17 @@ Rules:
 - mode "set" = replace that day's shifts with exactly these shifts; "add" = keep existing shifts and add these (use for "also", "in addition", "add"); "remove" = take these shifts away; "clear" = remove every shift (day off, "clear", "cancel all"). When the user simply says "assign", use "set".
 - Use dept (exact name from DEPARTMENTS) for "everyone in ICU"; use all=true only when the user clearly says everyone/all staff; otherwise use ids.
 - Dates: use the CALENDAR to resolve words. "next N days" starts TOMORROW and covers N days. "this week" = Monday to Sunday of the current week; "next week" = Monday to Sunday of the following week. "today" and "tomorrow" are single days. A weekday name means the next such date from today. Set "from" and "to" (inclusive); use "weekdays" only when the user restricts days (for example "weekdays only" = mon..fri). Never cover more than 62 days.
-- AUTO-PLANNING: when the manager wants shifts arranged automatically under a rule (for example "assign everyone shifts so nobody works back to back", "give everyone a day off between shifts", "at least 12 hours rest", "rotate fairly"), return "ops": [] and fill "gen": {"ids": [staff ids], "dept": string|null, "all": boolean, "from": "YYYY-MM-DD", "to": "YYYY-MM-DD", "shifts": [shift names, or [] for all shifts], "restHours": number, "perShift": number|null, "maxPerWeek": number|null, "offWeekdays": ["sun",...]|null, "replace": boolean}. Otherwise "gen" is null.
+- AUTO-PLANNING: when the manager wants shifts arranged automatically under a rule (for example "assign everyone shifts so nobody works back to back", "give everyone a day off between shifts", "at least 12 hours rest", "rotate fairly"), return "ops": [] and fill "gen": {"ids": [staff ids], "dept": string|null, "all": boolean, "from": "YYYY-MM-DD", "to": "YYYY-MM-DD", "shifts": [shift names, or [] for all shifts], "restHours": number, "perShift": number|null, "maxPerWeek": number|null, "offWeekdays": ["sun",...]|null, "deptShifts": {"DEPARTMENT": [shift names]}|null, "replace": boolean}. Otherwise "gen" is null.
 - restHours is the minimum gap in hours between the END of one shift and the START of the same person's next shift. Convert the manager's words: "N hours rest" = N; "N days off in between" = N*24; "a day gap", "no back to back", "not consecutive" with no number = 24 (a person on the Morning shift today may next work tomorrow night). If the manager gives no rule at all, return "gen": null and ask in "reply" how much rest is needed.
-- perShift only when the manager says how many people are needed on each shift each day; maxPerWeek only when a weekly limit is stated; offWeekdays only for fixed days off for everybody; replace is true only when told to overwrite or redo existing shifts. Dates follow the same rules as above. For "gen", "reply" says the rule and the dates you understood.
+- perShift only when the manager says how many people are needed on each shift each day; maxPerWeek only when a weekly limit is stated; deptShifts only when the manager says certain departments need only some shifts (for example "Reception only needs Morning" = {"RECEPTION": ["Morning"]}, using exact department names); offWeekdays only for fixed days off for everybody; replace is true only when told to overwrite or redo existing shifts. Dates follow the same rules as above. For "gen", "reply" says the rule and the dates you understood.
+- With "gen", ALSO list the manager's personal requests in "ops" (they are kept exactly and everything else is planned around them): a day off = {"ids":[..],"from":D,"to":D,"shifts":[],"mode":"clear"}; a required shift = the same with "shifts":[name] and "mode":"set". Departments are planned separately, so never invent per-person ops for coverage.
+- If the manager only asks to avoid overlaps or a night shift followed by a morning shift, use restHours 12. If the manager mentions weekly offs or days off each week, use maxPerWeek 5 (or the number they state). Use replace true when asked to create, make or generate a (complete or new) roster for a period; false when asked to fill gaps or add to what exists.
 - If the request is not about the roster, return "ops": [] and a short helpful reply.`;
 const PARSE_SYSTEM = `You extract roster entries from messy text copied from a spreadsheet or PDF. Output ONLY one JSON object: {"rows": [[person, date, shifts], ...]} where person is the staff name or id exactly as written, date is YYYY-MM-DD, and shifts is the shift names joined by "+" (for example "Morning+Evening"), or "OFF" for a day off. Use only shift names from SHIFTS (map obvious abbreviations such as M, E, N to them). Dates may be written as columns headers, weekdays (use WEEKSTART to turn Monday..Sunday into dates), or day/month/year (day first). Skip empty cells and anything that is not a roster entry. Never invent entries.`;
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
-/* ---------- auto-planner: builds a roster that follows ANY rest rule the manager states (the AI only reads the rule; this code does the planning) ---------- */
-async function genRoster(kv, g, cfg, staff) {
+/* ---------- auto-planner: builds a roster that follows ANY rest rule the manager states (the AI only reads the rules; this code does the planning) ---------- */
+async function genRoster(kv, g, cfg, staff, fixedChanges = []) {
   const problems = [], out = { changes: [], problems, note: '' };
   const from = clean(g.from, 10), to = clean(g.to || g.from, 10);
   if (!validDate(from) || !validDate(to) || to < from) { problems.push('The dates in that request were not clear.'); return out; }
@@ -329,7 +331,7 @@ async function genRoster(kv, g, cfg, staff) {
   if (span > 62) { problems.push('That covers more than 62 days. Please ask for a shorter period.'); return out; }
   const rest = Number(g.restHours);
   if (g.restHours == null || g.restHours === '' || !Number.isFinite(rest) || rest < 0 || rest > 240) { problems.push('Please say how much rest is needed between two shifts of the same person (for example 24 hours, or 2 days).'); return out; }
-  const restMs = rest * 36e5, byName = new Map(cfg.tpl.map((t) => [t.name.toLowerCase(), t])), tplIds = new Set(cfg.tpl.map((t) => t.id));
+  const restMs = rest * 36e5, byName = new Map(cfg.tpl.map((t) => [t.name.toLowerCase(), t])), tplById = new Map(cfg.tpl.map((t) => [t.id, t]));
   let tpls = [];
   for (const nme of Array.isArray(g.shifts) ? g.shifts : []) { const t = byName.get(String(nme).trim().toLowerCase()); if (!t) { problems.push('Unknown shift "' + clean(nme, 30) + '".'); return out; } if (!tpls.includes(t)) tpls.push(t); }
   if (!tpls.length) tpls = cfg.tpl.slice();
@@ -343,64 +345,104 @@ async function genRoster(kv, g, cfg, staff) {
   who = [...new Set(who)].slice(0, 150);
   if (!who.length) { problems.push('No matching staff members were found.'); return out; }
   const win = (d, t) => { const [y, m, dd] = d.split('-').map(Number), [sh, sm] = t.start.split(':').map(Number), [eh, em] = t.end.split(':').map(Number), st = Date.UTC(y, m - 1, dd, sh, sm); let en = Date.UTC(y, m - 1, dd, eh, em); if (en <= st) en += 864e5; return { st, en }; };
+  const fmt = (d) => d.slice(8) + '/' + d.slice(5, 7);
   const lo = ymd(Date.parse(from) - 2 * 864e5), hi = ymd(Date.parse(to) + 2 * 864e5), allDays = [];
   for (let t = Date.parse(lo); t <= Date.parse(hi); t += 864e5) allDays.push(ymd(t));
   const maps = await Promise.all([...new Set(allDays.map(mondayOf))].map((w) => readWeek(kv, w))), roster = Object.assign({}, ...maps);
-  const tplById = new Map(cfg.tpl.map((t) => [t.id, t])), replace = g.replace === true, off = new Set((Array.isArray(g.offWeekdays) ? g.offWeekdays : []).map((x) => String(x).slice(0, 3).toLowerCase()));
+  const replace = g.replace === true, offDays = new Set((Array.isArray(g.offWeekdays) ? g.offWeekdays : []).map((x) => String(x).slice(0, 3).toLowerCase()));
   const maxWk = Number(g.maxPerWeek) >= 1 ? Math.floor(Number(g.maxPerWeek)) : 0;
+  // the manager's personal requests (a day off, a required shift) are kept exactly; everything else is planned around them
+  const reqOff = new Map(), reqShift = new Map(), inWho = new Set(who.map((x) => x.id));
+  for (const c of fixedChanges) {
+    const pass = { sid: c.sid, dt: c.dt, tids: c.tids, mode: c.mode };
+    if (!inWho.has(c.sid) || c.dt < from || c.dt > to || !['set', 'add'].includes(c.mode)) { out.changes.push(pass); continue; }
+    if (!c.tids.length) { if (!reqOff.has(c.sid)) reqOff.set(c.sid, new Set()); reqOff.get(c.sid).add(c.dt); }
+    else { if (!reqShift.has(c.sid)) reqShift.set(c.sid, new Map()); reqShift.get(c.sid).set(c.dt, c.tids); }
+  }
   const people = who.map((s) => {
-    const p = { s, fixed: [], leave: new Set(), busy: new Set(), had: new Set(), wk: {}, count: 0, last: null, lastEnd: -Infinity };
+    const p = { s, fixed: [], leave: new Set(), busy: new Set(), had: new Set(), wk: {}, count: 0, last: null, lastEnd: -Infinity, off: reqOff.get(s.id) || new Set(), forced: new Map() }, rs = reqShift.get(s.id) || new Map();
     for (const d of allDays) {
       const list = asList(roster[s.id + '|' + d]);
       if (list.includes('LEAVE')) p.leave.add(d);
       for (const tid of list) {
         const t = tplById.get(tid); if (!t) continue;
-        if (replace && d >= from && d <= to) { p.had.add(d); continue; }
-        const w = win(d, t); p.fixed.push(w); p.busy.add(d); p.wk[mondayOf(d)] = (p.wk[mondayOf(d)] || 0) + 1;
+        if ((replace && d >= from && d <= to) || p.off.has(d) || rs.has(d)) { p.had.add(d); continue; }
+        const w = win(d, t); p.fixed.push({ ...w, lab: t.name + ' ' + fmt(d) }); p.busy.add(d); p.wk[mondayOf(d)] = (p.wk[mondayOf(d)] || 0) + 1;
         if (d < from && w.en > p.lastEnd) p.lastEnd = w.en;
       }
     }
+    for (const [d, tids] of rs) {
+      if (p.leave.has(d)) { problems.push(`${s.name} is on approved leave on ${fmt(d)}, so the requested shift was not added.`); continue; }
+      const arr = []; for (const tid of tids) { const t = tplById.get(tid); if (!t) continue; const w = win(d, t); arr.push({ tid, w }); p.fixed.push({ ...w, lab: t.name + ' ' + fmt(d), forced: true }); }
+      if (arr.length) { p.forced.set(d, arr); p.busy.add(d); }
+    }
     return p;
   });
-  const avgLen = tpls.reduce((a, t) => { const w = win('2000-01-01', t); return a + (w.en - w.st); }, 0) / tpls.length / 36e5;
-  const capacity = people.length * Math.min(1, 24 / (avgLen + rest)), wanted = Number(g.perShift) >= 1 ? Math.floor(Number(g.perShift)) : 0;
+  const wanted = Number(g.perShift) >= 1 ? Math.floor(Number(g.perShift)) : 0;
   const canWork = (p, w, d) => {
-    if (p.leave.has(d) || p.busy.has(d)) return false;
+    if (p.leave.has(d) || p.busy.has(d) || p.off.has(d)) return false;
     if (p.last && w.st - p.last.en < restMs) return false;
     for (const q of p.fixed) { const gap = w.st >= q.en ? w.st - q.en : q.st >= w.en ? q.st - w.en : -1; if (gap < restMs) return false; }
     return true;
   };
   const better = (a, b) => a.count !== b.count ? a.count < b.count : a.lastEnd !== b.lastEnd ? a.lastEnd < b.lastEnd : a.s.id < b.s.id;
-  const init = people.map((p) => ({ lastEnd: p.lastEnd, busy: new Set(p.busy), wk: { ...p.wk } }));
-  // one full planning pass with "perShift" people wanted on every shift every day
-  const plan = (perShift) => {
-    people.forEach((p, i) => { p.count = 0; p.last = null; p.lastEnd = init[i].lastEnd; p.busy = new Set(init[i].busy); p.wk = { ...init[i].wk }; });
-    const gen = new Map(), perTpl = tpls.map(() => 0); let total = 0, short = 0;
+  const init = new Map(people.map((p) => [p, { lastEnd: p.lastEnd, busy: new Set(p.busy), wk: { ...p.wk } }]));
+  // one full planning pass for ONE department, with "perShift" people wanted on every shift every day
+  const plan = (grp, perShift, T) => {
+    grp.forEach((p) => { const i = init.get(p); p.count = 0; p.last = null; p.lastEnd = i.lastEnd; p.busy = new Set(i.busy); p.wk = { ...i.wk }; });
+    const gen = new Map(), perTpl = T.map(() => 0), lack = T.map(() => []); let total = 0, short = 0, dayN = 0;
     for (let i = 0; i < span; i++) {
-      const d = ymd(Date.parse(from) + i * 864e5);
-      if (off.has(DAYS[new Date(d + 'T00:00:00Z').getUTCDay()])) continue;
-      const wk = mondayOf(d), wins = tpls.map((t) => win(d, t)), counts = tpls.map(() => 0);
-      for (let round = 0; round < perShift; round++) for (let ti = 0; ti < tpls.length; ti++) {
+      const d = ymd(Date.parse(from) + i * 864e5), wk = mondayOf(d), wins = T.map((t) => win(d, t)), counts = T.map(() => 0);
+      for (const p of grp) {
+        const f = p.forced.get(d); if (!f) continue;
+        gen.set(p.s.id + '|' + d, f.map((x) => x.tid));
+        for (const x of f) { const ti = T.findIndex((t) => t.id === x.tid); if (ti >= 0) { counts[ti]++; perTpl[ti]++; } total++; p.count++; p.last = x.w; p.lastEnd = x.w.en; p.wk[wk] = (p.wk[wk] || 0) + 1; }
+      }
+      if (offDays.has(DAYS[new Date(d + 'T00:00:00Z').getUTCDay()])) continue;
+      dayN++;
+      for (let round = 0; round < perShift; round++) for (let ti = 0; ti < T.length; ti++) {
         if (counts[ti] >= perShift) continue;
         let best = null;
-        for (const p of people) { if (!canWork(p, wins[ti], d)) continue; if (maxWk && (p.wk[wk] || 0) >= maxWk) continue; if (!best || better(p, best)) best = p; }
+        for (const p of grp) { if (!canWork(p, wins[ti], d)) continue; if (maxWk && (p.wk[wk] || 0) >= maxWk) continue; if (!best || better(p, best)) best = p; }
         if (!best) continue;
         counts[ti]++; perTpl[ti]++; total++; best.count++; best.last = wins[ti]; best.lastEnd = wins[ti].en; best.busy.add(d); best.wk[wk] = (best.wk[wk] || 0) + 1;
-        gen.set(best.s.id + '|' + d, [tpls[ti].id]);
+        gen.set(best.s.id + '|' + d, [T[ti].id]);
       }
-      short += counts.filter((c) => c < perShift).length;
+      counts.forEach((c, ti) => { if (c < perShift) { short++; lack[ti].push(d); } });
     }
-    return { gen, perTpl, total, short };
+    return { gen, perTpl, total, short, lack, dayN };
   };
-  // Without a number from the manager: use the most people per shift that can be kept the same EVERY day under the rest rule.
-  let perShift = wanted || Math.max(1, Math.ceil(capacity / tpls.length)), res = plan(perShift);
-  if (!wanted) while (res.short > 0 && perShift > 1) { perShift--; res = plan(perShift); }
-  const { gen, perTpl, total } = res;
+  // Without a number from the manager: each department gets the most people per shift that can be kept the same EVERY day under the rules.
+  const dsh = g.deptShifts && typeof g.deptShifts === 'object' ? g.deptShifts : {};
+  const shiftsFor = (dept) => { const want = dsh[dept]; if (!Array.isArray(want) || !want.length) return tpls; const l = tpls.filter((t) => want.some((n) => String(n).trim().toLowerCase() === t.name.toLowerCase())); return l.length ? l : tpls; };
+  const planFor = (grp, T) => {
+    const len = T.reduce((a, t) => { const w = win('2000-01-01', t); return a + (w.en - w.st); }, 0) / T.length / 36e5;
+    let cap = grp.length * Math.min(1, 24 / (len + rest)); if (maxWk) cap = Math.min(cap, grp.length * maxWk / 7);
+    let ps = wanted || Math.max(1, Math.ceil(cap / T.length)), res = plan(grp, ps, T);
+    if (!wanted) while (res.short > 0 && ps > 1) { ps--; res = plan(grp, ps, T); }
+    return { ps, res };
+  };
+  const groups = new Map();
+  for (const p of people) { const k = p.s.dept || 'No department'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
+  const gen = new Map(), perTplAll = new Map(); let total = 0; const shortages = [];
+  for (const [dept, grp] of groups) {
+    const T = shiftsFor(dept), { ps, res } = planFor(grp, T);
+    res.gen.forEach((v, k) => gen.set(k, v)); res.perTpl.forEach((c, i) => perTplAll.set(T[i].name, (perTplAll.get(T[i].name) || 0) + c)); total += res.total;
+    res.lack.forEach((days, ti) => { if (days.length) shortages.push(`Shortage - ${dept}: ${T[ti].name} ` + (ps === 1 ? 'has nobody assigned' : `has fewer than ${ps} people`) + ` on ${days.length} of ${res.dayN} days` + (days.length <= 6 ? ' (' + days.map(fmt).join(', ') + ')' : '') + '.'); });
+  }
+  // double-check every person's final shifts against the rest rule and report conflicts
+  const conflicts = [], mine = new Map();
+  for (const [k, tids] of gen) { const [sid, d] = k.split('|'); if (!mine.has(sid)) mine.set(sid, []); for (const tid of tids) { const t = tplById.get(tid); if (t) mine.get(sid).push({ ...win(d, t), lab: t.name + ' ' + fmt(d) }); } }
+  for (const p of people) {
+    const list = [...(mine.get(p.s.id) || []), ...p.fixed.filter((x) => !x.forced)].sort((a, b) => a.st - b.st);
+    for (let i = 1; i < list.length; i++) { const gap = list[i].st - list[i - 1].en; if (gap < restMs && conflicts.length < 10) conflicts.push(`Conflict - ${p.s.name}: ${list[i - 1].lab} then ${list[i].lab} leave only ${Math.max(0, Math.round(gap / 36e5))} h of rest` + (gap < 0 ? ' (overlap)' : '') + '. This comes from a request you made.'); }
+  }
   for (const [k, tids] of gen) { const [sid, dt] = k.split('|'); out.changes.push({ sid, dt, tids, mode: 'set' }); }
-  if (replace) for (const p of people) for (const d of p.had) if (!gen.has(p.s.id + '|' + d) && !p.leave.has(d)) out.changes.push({ sid: p.s.id, dt: d, tids: [], mode: 'set' });
+  for (const p of people) for (const d of p.had) if (!gen.has(p.s.id + '|' + d) && !p.leave.has(d)) out.changes.push({ sid: p.s.id, dt: d, tids: [], mode: 'set' });
   if (out.changes.length > 3000) { out.changes = []; problems.push('That would change more than 3000 days. Please ask for a shorter period or fewer people.'); return out; }
-  const restTxt = rest % 24 === 0 && rest > 0 ? rest / 24 + (rest === 24 ? ' day' : ' days') : rest + ' hours';
-  out.note = `Planned ${total} shifts for ${people.length} people (${tpls.map((t, i) => t.name + ' ' + perTpl[i]).join(', ')}), at least ${restTxt} between each person's shifts${wanted ? '' : ', ' + perShift + ' per shift each day'}${res.short ? '. Warning: on ' + res.short + ' shift slots there are fewer than ' + perShift + ' people because of the rest rule or leave' : ''}. Existing shifts${replace ? ' in these dates were replaced' : ' and leave were kept'}.`;
+  problems.push(...conflicts, ...shortages);
+  const cnts = people.map((p) => (mine.get(p.s.id) || []).length), restTxt = rest % 24 === 0 && rest > 0 ? rest / 24 + (rest === 24 ? ' day' : ' days') : rest + ' hours';
+  out.note = `Planned ${total} shifts for ${people.length} people, each department planned on its own (${[...perTplAll].map(([n, c]) => n + ' ' + c).join(', ')}). At least ${restTxt} between a person's shifts${maxWk ? ', at most ' + maxWk + ' shifts per week' : ''}. Each person works ${Math.min(...cnts)} to ${Math.max(...cnts)} shifts.` + (reqOff.size + reqShift.size ? ' Your personal requests were applied.' : '') + (shortages.length || conflicts.length ? ` I found ${shortages.length} staffing shortage${shortages.length === 1 ? '' : 's'} and ${conflicts.length} conflict${conflicts.length === 1 ? '' : 's'} (listed below).` : ' No shortages or conflicts found.') + ' Nothing is saved until you press Confirm.';
   return out;
 }
 const normName = (x) => String(x || '').toLowerCase().replace(/\b(dr|mr|mrs|ms|prof)\b\.?/g, ' ').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -841,7 +883,7 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
         return reply({ applied: r.rows.length, noop: r.noop, problems: r.problems.slice(0, 20), undo: r.rows.map((x) => ({ sid: x.sid, dt: x.dt, tids: x.before, mode: 'set' })) });
       }
       case 'aiPlan': {
-        needMgr(); const msg = clean(p.message, 600); if (!msg) fail(400, 'Type a request first.');
+        needMgr(); const msg = clean(p.message, 2000); if (!msg) fail(400, 'Type a request first.');
         await aiGate(me.id);
         const today = todayIn(tz), cal = [...Array(21)].map((_, i) => { const d = ymd(Date.parse(today) + i * 864e5); return DAYS[new Date(d + 'T00:00:00Z').getUTCDay()] + ' ' + d; }).join(', ');
         const hist = (Array.isArray(p.history) ? p.history : []).slice(-6).map((h) => (h.role === 'user' ? 'MANAGER: ' : 'ASSISTANT: ') + clean(h.text, 300)).join('\n');
@@ -849,8 +891,9 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
         const wl = [...words], pool = staff, cand = (pool.length <= 60 ? pool : pool.filter((s) => normName(s.name).split(' ').some((w) => words.has(w) || (w.length >= 4 && wl.some((x) => x.length >= 4 && x.slice(0, 4) === w.slice(0, 4)))))).slice(0, 40);
         const user = `TODAY: ${DAYS[new Date(today + 'T00:00:00Z').getUTCDay()]} ${today}\nCALENDAR: ${cal}\nSHIFTS: ${cfg.tpl.map((t) => `${t.name} (${t.start}-${t.end})`).join('; ')}\nDEPARTMENTS: ${cfg.depts.join('; ')}\nCANDIDATES (id | name | department):\n${cand.map((s) => `${s.id} | ${s.name} | ${s.dept}`).join('\n') || '(none matched)'}\n${hist ? 'RECENT CONVERSATION:\n' + hist + '\n' : ''}REQUEST: ${msg}`;
         const out = await callAI(env, PLAN_SYSTEM, user), reply0 = clean(out && out.reply, 500);
-        if (out && out.gen && typeof out.gen === 'object' && !(Array.isArray(out.ops) && out.ops.length)) {
-          const g = await genRoster(kv, out.gen, cfg, staff);
+        if (out && out.gen && typeof out.gen === 'object') {
+          const exg = expandOps(Array.isArray(out.ops) ? out.ops.slice(0, 40) : [], cfg, staff);
+          const g = await genRoster(kv, out.gen, cfg, staff, exg.changes); g.problems.unshift(...exg.problems);
           if (!g.changes.length) return ok({ reply: reply0 || 'I could not build that roster.', problems: g.problems, preview: null, changes: [] });
           const r = await resolveChanges(kv, cfg, byId, g.changes);
           return ok({ reply: [reply0, g.note].filter(Boolean).join(' '), preview: previewOf(r.rows, r.noop, [...g.problems, ...r.problems], cfg, byId), changes: r.rows.map((x) => ({ sid: x.sid, dt: x.dt, tids: x.after, mode: 'set' })) });
