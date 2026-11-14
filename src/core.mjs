@@ -943,12 +943,8 @@ export async function runReminders({ kv, env, send = sendMail, at = new Date(), 
   for (let i = 0; i < due.length && Date.now() - t0 < budgetMs; i += 8) {
     await Promise.all(due.slice(i, i + 8).map(async ({ s, date, stage, k }) => {
       sentMap[date][k] = Date.now();
-      const what = stage === 'soon' ? '30-Minute Shift Reminder' : 'Shift Start';
       await pushUsers(kv, env, [s.id], stage === 'soon' ? { title: 'Shift starts in about 30 minutes', body: 'Get ready and clock in at the hospital.', url: '/', tag: 'shift-' + date + '-' + k.split('|')[2] } : { title: 'Your shift has started', body: 'Please clock in at the hospital.', url: '/', tag: 'shift-' + date + '-' + k.split('|')[2] }, { ttl: 1800, urgency: 'high', site: (env.SITE_URL || cfg.site || '') });
-      if (!s.email) return entry(`⚠ ${what} email skipped for ${s.name} (no email on file).`);
-      const r = await send(env, s.email, stage === 'soon' ? 'Your shift starts in about 30 minutes' : 'Your shift has started', stage === 'soon' ? SOON_TEXT : START_TEXT);
-      if (r.ok) sent++;
-      entry(r.ok ? `📧 Automated email dispatched to: ${s.email} for ${what}.` : `⚠ ${what} email to ${s.email} failed (${r.status}).`);
+      // Shift reminders are phone notifications only. The only email the app sends is the welcome email with the login ID and password.
     }));
   }
   await Promise.all(dates.map((d) => kv.set('sent/' + d, sentMap[d])));
