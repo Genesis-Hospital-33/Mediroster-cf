@@ -255,7 +255,7 @@ function previewOf(rows, noop, problems, cfg, byId) {
 /* ---------- AI assistant plumbing (the AI only PROPOSES; nothing is saved without Confirm) ---------- */
 async function callAI(env, system, user, totalMs = 8500) {
   const key = env.AI_API_KEY || env.GEMINI_API_KEY;
-  if (!key) fail(400, 'The AI assistant is not switched on yet. The Master Admin needs to add AI_API_KEY in Netlify (see the guide, Part F).');
+  if (!key && !env.AI) fail(400, 'The AI assistant is not switched on yet. The Master Admin needs to add AI_API_KEY in Netlify (see the guide, Part F).');
   const provider = String(env.AI_PROVIDER || 'gemini').toLowerCase();
   // A fast "lite" model first (quick and rarely overloaded), the regular one as backup. AI_MODEL overrides both.
   const models = env.AI_MODEL ? [env.AI_MODEL] : provider === 'gemini' ? ['gemini-flash-lite-latest', 'gemini-flash-latest'] : [provider === 'anthropic' ? 'claude-haiku-5-5' : 'gpt-4o-mini'];
@@ -276,6 +276,7 @@ async function callAI(env, system, user, totalMs = 8500) {
       }
       const j = await r.json().catch(() => ({}));
       if (!r.ok) {
+        if ((r.status === 401 || r.status === 403) && env.AI) return { retry: true, why: 'key refused' };
         if (r.status === 401 || r.status === 403) fail(502, `The AI service refused the key (${r.status}). Check AI_API_KEY in Netlify. ${clean((j.error && (j.error.message || j.error)) || '', 120)}`);
         if ([400, 404, 408, 429, 500, 502, 503, 504].includes(r.status)) return { retry: true, why: String(r.status) };
         fail(502, `The AI service refused the request (${r.status}). ${clean((j.error && (j.error.message || j.error)) || '', 140)}`);
@@ -289,14 +290,22 @@ async function callAI(env, system, user, totalMs = 8500) {
       return { retry: true, why: e && e.name === 'AbortError' ? 'too slow' : 'no connection' };
     } finally { clearTimeout(timer); }
   };
-  for (let i = 0; i < models.length; i++) {
+  for (let i = 0; key && i < models.length; i++) {
     const left = totalMs - (Date.now() - t0); if (left < 1200) break;
     const r = await attempt(models[i], i < models.length - 1 ? Math.min(left, 5500) : left);
     if (r.ok) return r.data; last = r.why;
   }
+  // Backup: Cloudflare's own AI (only when the AI binding is set up in wrangler.jsonc). Used when the main AI is busy or limited.
+  if (env.AI && typeof env.AI.run === 'function') {
+    try {
+      const res = await Promise.race([env.AI.run(env.AI_FALLBACK_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast', { messages: [{ role: 'system', content: system }, { role: 'user', content: user }], max_tokens: 2000, temperature: 0 }), new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 20000))]);
+      const raw = res && res.response, t = (typeof raw === 'string' ? raw : JSON.stringify(raw || {})).replace(/^```(?:json)?/i, '').replace(/```\s*$/, '').trim();
+      try { return JSON.parse(t); } catch (e) { const m = t.match(/\{[\s\S]*\}/); if (m) return JSON.parse(m[0]); }
+    } catch (e) { last = last + ' / backup AI: ' + clean(e && e.message, 40); }
+  }
   fail(503, `The AI service is busy or slow right now (${last}). Please try again in a minute.`);
 }
-const PLAN_SYSTEM = `You convert a hospital roster manager's request into JSON. Output ONLY one JSON object: {"reply": string, "ops": [ {"ids": [staff ids], "dept": string|null, "all": boolean, "from": "YYYY-MM-DD", "to": "YYYY-MM-DD", "weekdays": ["mon","tue",...]|null, "shifts": [shift names], "mode": "set"|"add"|"remove"|"clear"} ]}.
+const PLAN_SYSTEM = `You convert a hospital roster manager's request into JSON. Output ONLY one JSON object: {"reply": string, "ops": [ {"ids": [staff ids], "dept": string|null, "all": boolean, "from": "YYYY-MM-DD", "to": "YYYY-MM-DD", "weekdays": ["mon","tue",...]|null, "shifts": [shift names], "mode": "set"|"add"|"remove"|"clear"} ], "gen": object|null}.
 Rules:
 - "reply" is one or two plain sentences saying exactly what you understood, including the exact dates (for example "Morning shift for Anita Rao from Tue 27 Oct to Mon 2 Nov"), or a short question if something is unclear.
 - Use ONLY staff ids listed under CANDIDATES. If a name is not clearly one candidate, return "ops": [] and ask which person is meant. Never invent ids or shift names.
@@ -304,9 +313,96 @@ Rules:
 - mode "set" = replace that day's shifts with exactly these shifts; "add" = keep existing shifts and add these (use for "also", "in addition", "add"); "remove" = take these shifts away; "clear" = remove every shift (day off, "clear", "cancel all"). When the user simply says "assign", use "set".
 - Use dept (exact name from DEPARTMENTS) for "everyone in ICU"; use all=true only when the user clearly says everyone/all staff; otherwise use ids.
 - Dates: use the CALENDAR to resolve words. "next N days" starts TOMORROW and covers N days. "this week" = Monday to Sunday of the current week; "next week" = Monday to Sunday of the following week. "today" and "tomorrow" are single days. A weekday name means the next such date from today. Set "from" and "to" (inclusive); use "weekdays" only when the user restricts days (for example "weekdays only" = mon..fri). Never cover more than 62 days.
+- AUTO-PLANNING: when the manager wants shifts arranged automatically under a rule (for example "assign everyone shifts so nobody works back to back", "give everyone a day off between shifts", "at least 12 hours rest", "rotate fairly"), return "ops": [] and fill "gen": {"ids": [staff ids], "dept": string|null, "all": boolean, "from": "YYYY-MM-DD", "to": "YYYY-MM-DD", "shifts": [shift names, or [] for all shifts], "restHours": number, "perShift": number|null, "maxPerWeek": number|null, "offWeekdays": ["sun",...]|null, "replace": boolean}. Otherwise "gen" is null.
+- restHours is the minimum gap in hours between the END of one shift and the START of the same person's next shift. Convert the manager's words: "N hours rest" = N; "N days off in between" = N*24; "a day gap", "no back to back", "not consecutive" with no number = 24 (a person on the Morning shift today may next work tomorrow night). If the manager gives no rule at all, return "gen": null and ask in "reply" how much rest is needed.
+- perShift only when the manager says how many people are needed on each shift each day; maxPerWeek only when a weekly limit is stated; offWeekdays only for fixed days off for everybody; replace is true only when told to overwrite or redo existing shifts. Dates follow the same rules as above. For "gen", "reply" says the rule and the dates you understood.
 - If the request is not about the roster, return "ops": [] and a short helpful reply.`;
 const PARSE_SYSTEM = `You extract roster entries from messy text copied from a spreadsheet or PDF. Output ONLY one JSON object: {"rows": [[person, date, shifts], ...]} where person is the staff name or id exactly as written, date is YYYY-MM-DD, and shifts is the shift names joined by "+" (for example "Morning+Evening"), or "OFF" for a day off. Use only shift names from SHIFTS (map obvious abbreviations such as M, E, N to them). Dates may be written as columns headers, weekdays (use WEEKSTART to turn Monday..Sunday into dates), or day/month/year (day first). Skip empty cells and anything that is not a roster entry. Never invent entries.`;
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+/* ---------- auto-planner: builds a roster that follows ANY rest rule the manager states (the AI only reads the rule; this code does the planning) ---------- */
+async function genRoster(kv, g, cfg, staff) {
+  const problems = [], out = { changes: [], problems, note: '' };
+  const from = clean(g.from, 10), to = clean(g.to || g.from, 10);
+  if (!validDate(from) || !validDate(to) || to < from) { problems.push('The dates in that request were not clear.'); return out; }
+  const span = (Date.parse(to) - Date.parse(from)) / 864e5 + 1;
+  if (span > 62) { problems.push('That covers more than 62 days. Please ask for a shorter period.'); return out; }
+  const rest = Number(g.restHours);
+  if (g.restHours == null || g.restHours === '' || !Number.isFinite(rest) || rest < 0 || rest > 240) { problems.push('Please say how much rest is needed between two shifts of the same person (for example 24 hours, or 2 days).'); return out; }
+  const restMs = rest * 36e5, byName = new Map(cfg.tpl.map((t) => [t.name.toLowerCase(), t])), tplIds = new Set(cfg.tpl.map((t) => t.id));
+  let tpls = [];
+  for (const nme of Array.isArray(g.shifts) ? g.shifts : []) { const t = byName.get(String(nme).trim().toLowerCase()); if (!t) { problems.push('Unknown shift "' + clean(nme, 30) + '".'); return out; } if (!tpls.includes(t)) tpls.push(t); }
+  if (!tpls.length) tpls = cfg.tpl.slice();
+  if (!tpls.length) { problems.push('There are no shift templates yet.'); return out; }
+  tpls.sort((a, b) => a.start.localeCompare(b.start));
+  let who = [];
+  const byId = new Map(staff.map((x) => [x.id, x]));
+  if (g.all === true) who = staff.filter((x) => x.role !== 'master');
+  else if (g.dept) { if (!cfg.depts.includes(g.dept)) { problems.push('Unknown department "' + clean(g.dept, 30) + '".'); return out; } who = staff.filter((x) => x.dept === g.dept && x.role !== 'master'); }
+  else who = (Array.isArray(g.ids) ? g.ids : []).map((i) => byId.get(String(i))).filter(Boolean);
+  who = [...new Set(who)].slice(0, 150);
+  if (!who.length) { problems.push('No matching staff members were found.'); return out; }
+  const win = (d, t) => { const [y, m, dd] = d.split('-').map(Number), [sh, sm] = t.start.split(':').map(Number), [eh, em] = t.end.split(':').map(Number), st = Date.UTC(y, m - 1, dd, sh, sm); let en = Date.UTC(y, m - 1, dd, eh, em); if (en <= st) en += 864e5; return { st, en }; };
+  const lo = ymd(Date.parse(from) - 2 * 864e5), hi = ymd(Date.parse(to) + 2 * 864e5), allDays = [];
+  for (let t = Date.parse(lo); t <= Date.parse(hi); t += 864e5) allDays.push(ymd(t));
+  const maps = await Promise.all([...new Set(allDays.map(mondayOf))].map((w) => readWeek(kv, w))), roster = Object.assign({}, ...maps);
+  const tplById = new Map(cfg.tpl.map((t) => [t.id, t])), replace = g.replace === true, off = new Set((Array.isArray(g.offWeekdays) ? g.offWeekdays : []).map((x) => String(x).slice(0, 3).toLowerCase()));
+  const maxWk = Number(g.maxPerWeek) >= 1 ? Math.floor(Number(g.maxPerWeek)) : 0;
+  const people = who.map((s) => {
+    const p = { s, fixed: [], leave: new Set(), busy: new Set(), had: new Set(), wk: {}, count: 0, last: null, lastEnd: -Infinity };
+    for (const d of allDays) {
+      const list = asList(roster[s.id + '|' + d]);
+      if (list.includes('LEAVE')) p.leave.add(d);
+      for (const tid of list) {
+        const t = tplById.get(tid); if (!t) continue;
+        if (replace && d >= from && d <= to) { p.had.add(d); continue; }
+        const w = win(d, t); p.fixed.push(w); p.busy.add(d); p.wk[mondayOf(d)] = (p.wk[mondayOf(d)] || 0) + 1;
+        if (d < from && w.en > p.lastEnd) p.lastEnd = w.en;
+      }
+    }
+    return p;
+  });
+  const avgLen = tpls.reduce((a, t) => { const w = win('2000-01-01', t); return a + (w.en - w.st); }, 0) / tpls.length / 36e5;
+  const capacity = people.length * Math.min(1, 24 / (avgLen + rest)), wanted = Number(g.perShift) >= 1 ? Math.floor(Number(g.perShift)) : 0;
+  const canWork = (p, w, d) => {
+    if (p.leave.has(d) || p.busy.has(d)) return false;
+    if (p.last && w.st - p.last.en < restMs) return false;
+    for (const q of p.fixed) { const gap = w.st >= q.en ? w.st - q.en : q.st >= w.en ? q.st - w.en : -1; if (gap < restMs) return false; }
+    return true;
+  };
+  const better = (a, b) => a.count !== b.count ? a.count < b.count : a.lastEnd !== b.lastEnd ? a.lastEnd < b.lastEnd : a.s.id < b.s.id;
+  const init = people.map((p) => ({ lastEnd: p.lastEnd, busy: new Set(p.busy), wk: { ...p.wk } }));
+  // one full planning pass with "perShift" people wanted on every shift every day
+  const plan = (perShift) => {
+    people.forEach((p, i) => { p.count = 0; p.last = null; p.lastEnd = init[i].lastEnd; p.busy = new Set(init[i].busy); p.wk = { ...init[i].wk }; });
+    const gen = new Map(), perTpl = tpls.map(() => 0); let total = 0, short = 0;
+    for (let i = 0; i < span; i++) {
+      const d = ymd(Date.parse(from) + i * 864e5);
+      if (off.has(DAYS[new Date(d + 'T00:00:00Z').getUTCDay()])) continue;
+      const wk = mondayOf(d), wins = tpls.map((t) => win(d, t)), counts = tpls.map(() => 0);
+      for (let round = 0; round < perShift; round++) for (let ti = 0; ti < tpls.length; ti++) {
+        if (counts[ti] >= perShift) continue;
+        let best = null;
+        for (const p of people) { if (!canWork(p, wins[ti], d)) continue; if (maxWk && (p.wk[wk] || 0) >= maxWk) continue; if (!best || better(p, best)) best = p; }
+        if (!best) continue;
+        counts[ti]++; perTpl[ti]++; total++; best.count++; best.last = wins[ti]; best.lastEnd = wins[ti].en; best.busy.add(d); best.wk[wk] = (best.wk[wk] || 0) + 1;
+        gen.set(best.s.id + '|' + d, [tpls[ti].id]);
+      }
+      short += counts.filter((c) => c < perShift).length;
+    }
+    return { gen, perTpl, total, short };
+  };
+  // Without a number from the manager: use the most people per shift that can be kept the same EVERY day under the rest rule.
+  let perShift = wanted || Math.max(1, Math.ceil(capacity / tpls.length)), res = plan(perShift);
+  if (!wanted) while (res.short > 0 && perShift > 1) { perShift--; res = plan(perShift); }
+  const { gen, perTpl, total } = res;
+  for (const [k, tids] of gen) { const [sid, dt] = k.split('|'); out.changes.push({ sid, dt, tids, mode: 'set' }); }
+  if (replace) for (const p of people) for (const d of p.had) if (!gen.has(p.s.id + '|' + d) && !p.leave.has(d)) out.changes.push({ sid: p.s.id, dt: d, tids: [], mode: 'set' });
+  if (out.changes.length > 3000) { out.changes = []; problems.push('That would change more than 3000 days. Please ask for a shorter period or fewer people.'); return out; }
+  const restTxt = rest % 24 === 0 && rest > 0 ? rest / 24 + (rest === 24 ? ' day' : ' days') : rest + ' hours';
+  out.note = `Planned ${total} shifts for ${people.length} people (${tpls.map((t, i) => t.name + ' ' + perTpl[i]).join(', ')}), at least ${restTxt} between each person's shifts${wanted ? '' : ', ' + perShift + ' per shift each day'}${res.short ? '. Warning: on ' + res.short + ' shift slots there are fewer than ' + perShift + ' people because of the rest rule or leave' : ''}. Existing shifts${replace ? ' in these dates were replaced' : ' and leave were kept'}.`;
+  return out;
+}
 const normName = (x) => String(x || '').toLowerCase().replace(/\b(dr|mr|mrs|ms|prof)\b\.?/g, ' ').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 function expandOps(ops, cfg, staff) {
   const changes = [], problems = [], tplBy = new Map();
@@ -753,6 +849,12 @@ export async function handle({ kv, env, origin, send = sendMail, defer }, body) 
         const wl = [...words], pool = staff, cand = (pool.length <= 60 ? pool : pool.filter((s) => normName(s.name).split(' ').some((w) => words.has(w) || (w.length >= 4 && wl.some((x) => x.length >= 4 && x.slice(0, 4) === w.slice(0, 4)))))).slice(0, 40);
         const user = `TODAY: ${DAYS[new Date(today + 'T00:00:00Z').getUTCDay()]} ${today}\nCALENDAR: ${cal}\nSHIFTS: ${cfg.tpl.map((t) => `${t.name} (${t.start}-${t.end})`).join('; ')}\nDEPARTMENTS: ${cfg.depts.join('; ')}\nCANDIDATES (id | name | department):\n${cand.map((s) => `${s.id} | ${s.name} | ${s.dept}`).join('\n') || '(none matched)'}\n${hist ? 'RECENT CONVERSATION:\n' + hist + '\n' : ''}REQUEST: ${msg}`;
         const out = await callAI(env, PLAN_SYSTEM, user), reply0 = clean(out && out.reply, 500);
+        if (out && out.gen && typeof out.gen === 'object' && !(Array.isArray(out.ops) && out.ops.length)) {
+          const g = await genRoster(kv, out.gen, cfg, staff);
+          if (!g.changes.length) return ok({ reply: reply0 || 'I could not build that roster.', problems: g.problems, preview: null, changes: [] });
+          const r = await resolveChanges(kv, cfg, byId, g.changes);
+          return ok({ reply: [reply0, g.note].filter(Boolean).join(' '), preview: previewOf(r.rows, r.noop, [...g.problems, ...r.problems], cfg, byId), changes: r.rows.map((x) => ({ sid: x.sid, dt: x.dt, tids: x.after, mode: 'set' })) });
+        }
         const ex = expandOps(Array.isArray(out && out.ops) ? out.ops.slice(0, 10) : [], cfg, staff);
         if (!ex.changes.length) return ok({ reply: reply0 || 'I could not work out a change from that. Please say which person, which shift and which dates.', problems: ex.problems, preview: null, changes: [] });
         const r = await resolveChanges(kv, cfg, byId, ex.changes);
