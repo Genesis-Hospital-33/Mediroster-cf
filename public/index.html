@@ -4,7 +4,8 @@
 <title>MediRoster – Hospital Workforce Portal</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#0f172a">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="/logo-192.png">
+<link rel="apple-touch-icon" href="/logo-180.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="MediRoster">
@@ -312,7 +313,7 @@ const bdg=(s,dark)=>s.designation?`<span class="ml-1 px-1.5 py-0.5 rounded-md ${
 /* ---------- AUTH SCREENS ---------- */
 function authShell(inner){document.getElementById('app').innerHTML=`<div class="min-h-screen grid lg:grid-cols-2">
  <div class="bg-slate-900 text-white p-8 lg:p-14 flex flex-col justify-between">
-  <div class="flex items-center gap-3"><div class="w-11 h-11 rounded-xl bg-blue-600 grid place-items-center text-2xl font-bold">+</div><div><div class="text-xl font-bold">MediRoster</div><div class="text-slate-400 text-sm">Hospital Workforce &amp; Roster System</div></div></div>
+  <div class="flex items-center gap-3"><img src="/logo-192.png" alt="" class="w-11 h-11 rounded-xl"><div><div class="text-xl font-bold">MediRoster</div><div class="text-slate-400 text-sm">Hospital Workforce &amp; Roster System</div></div></div>
   <div class="my-10"><h1 class="text-3xl lg:text-4xl font-bold leading-tight">Every shift covered.<br>Every clock-in verified.</h1><p class="text-slate-300 mt-4 max-w-md">Manual scheduling, role-based access, geofenced attendance and live shift reminders in one secure portal.</p></div>
   <div class="text-slate-400 text-xs">Authorised personnel only. Activity on this portal is logged.</div></div>
  <div class="p-6 lg:p-14 flex flex-col justify-center gap-5 max-w-xl w-full mx-auto">${inner}</div></div>`}
@@ -377,7 +378,7 @@ function drawerHTML(){const rl={master:'Master Admin',admin:'Admin',worker:'Work
  const item=id=>`<button class="mi ${tab===id?'on':''}" onclick="goTab('${id}')">${ic(TABIC[id])}<span>${lab[id]}</span>${id==='chat'?'<span id="chatdot" style="flex:none"></span>':''}${id==='leave'&&isMgr()&&db.leavePending?`<b class="cnt">${db.leavePending}</b>`:''}</button>`;
  return `<div id="scrim" onclick="closeMenu()"></div><aside id="drawer"><div class="dhead"><span class="av">${esc(initials(user.name))}</span><div style="min-width:0"><div class="dname">${esc(user.name)}</div><div class="dsub">${rl} · ${user.id}${user.designation?'<br>'+esc(user.designation):''}</div></div></div>
  <div class="dlist">${menuGroups(user.role).map(g=>g.map(item).join('')).join('<hr>')}</div>
- <div class="dfoot"><button class="mi" onclick="closeMenu();signOut()">${ic('out')}<span>Sign out</span></button><div class="ver">MediRoster v2.0</div></div></aside>`}
+ <div class="dfoot"><button class="mi" onclick="closeMenu();signOut()">${ic('out')}<span>Sign out</span></button><div class="ver"><img src="/logo-192.png" alt="" style="display:inline-block;width:18px;height:18px;border-radius:5px;vertical-align:middle;margin-right:6px">MediRoster v2.0</div></div></aside>`}
 function openMenu(){document.body.classList.add('menu-open')}
 function closeMenu(){document.body.classList.remove('menu-open')}
 function goTab(id){closeMenu();bell=false;if(id==='chat'&&(tab!=='chat'||cs.view!=='list')){cs.view='list';cs.room='all';cs.peer=null;cs.msgs=[];cs.att=null}tab=id;render();window.scrollTo(0,0)}
